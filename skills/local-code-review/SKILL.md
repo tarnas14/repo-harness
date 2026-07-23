@@ -87,10 +87,20 @@ failed integrity check, so concurrent activity turns a good review into an error
 to finish (it is typically run in the background). If parallel work is genuinely needed, run the
 review against a separate `git worktree` copy of the repository instead.
 
+## Keep reviewer output out of the main context
+
+Run the command once and wait for it to finish. The runner captures verbose Codex stdout and stderr
+under the Git-private `codex-review/runs/<timestamp>/codex-exec.log` path. It prints only short
+status lines and the final Markdown review.
+
+Do not add `tee`, tail the log, or repeatedly read live subprocess output into the conversation. If
+the run fails, inspect the saved log with a targeted search or a bounded tail instead of printing
+the whole file.
+
 ## Available script
 
 - `scripts/run-local-review.cjs` - runs Codex with the local review prompt, a structured output
-  schema, and a Git-private continuity ledger. This is the default path.
+  schema, quiet subprocess output, and a Git-private continuity ledger. This is the default path.
 - `scripts/run-code-review.cjs` - legacy bot-parity runner retained for eval comparisons and
   troubleshooting. It builds `.codex-ci/` artifacts like the GitHub Action bot.
 
@@ -114,6 +124,8 @@ Use `--no-codex` to build and inspect the prompt/schema without spending a model
   scope. It does not generate `.codex-ci/` diff artifacts.
 - Local continuity state lives in Git's private metadata path for the checkout, not in a committed
   file: `$(git rev-parse --git-path codex-review)/state.json` and `review.md`.
+- Verbose reviewer stdout and stderr stay in the matching Git-private
+  `runs/<timestamp>/codex-exec.log`; they are not streamed into the invoking agent's context.
 - If the same review scope was already reviewed, the runner exits without spending another model run.
   Use `--force` to re-review the same scope.
 - Branch and commit reviews require a clean worktree so Codex reads exactly the committed scope under

@@ -9,9 +9,16 @@ $(git rev-parse --git-path codex-review)/
   prompt.md
   codex-review-output.json
   runs/<timestamp>/
+    codex-exec.log
+    state.json
+    review.md
+    prompt.md
+    codex-review-output.json
 ```
 
 This keeps review state out of the checked-out worktree and avoids accidental commits.
+`codex-exec.log` contains the verbose reviewer subprocess output. Read it only for diagnostics, and
+use a targeted search or bounded tail instead of loading the whole file into an agent context.
 
 ## State Rules
 

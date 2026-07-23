@@ -136,13 +136,30 @@ function parseArgs(argv) {
 }
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: options.cwd,
-    input: options.input,
-    encoding: 'utf8',
-    maxBuffer: options.maxBuffer ?? MAX_GIT_OUTPUT_BUFFER_BYTES,
-    stdio: options.inherit ? ['pipe', 'inherit', 'inherit'] : ['pipe', 'pipe', 'pipe'],
-  })
+  let outputFileDescriptor
+  let result
+
+  try {
+    if (options.outputFile) {
+      fs.mkdirSync(path.dirname(options.outputFile), { recursive: true })
+      outputFileDescriptor = fs.openSync(options.outputFile, 'w', 0o600)
+    }
+
+    result = spawnSync(command, args, {
+      cwd: options.cwd,
+      input: options.input,
+      encoding: 'utf8',
+      maxBuffer: options.maxBuffer ?? MAX_GIT_OUTPUT_BUFFER_BYTES,
+      stdio:
+        outputFileDescriptor !== undefined
+          ? ['pipe', outputFileDescriptor, outputFileDescriptor]
+          : options.inherit
+            ? ['pipe', 'inherit', 'inherit']
+            : ['pipe', 'pipe', 'pipe'],
+    })
+  } finally {
+    if (outputFileDescriptor !== undefined) fs.closeSync(outputFileDescriptor)
+  }
 
   if (result.error) {
     const commandLine = `${command} ${args.join(' ')}`
@@ -158,9 +175,10 @@ function run(command, args, options = {}) {
   if (result.status !== 0 && !options.allowFailure) {
     const stderr = (result.stderr || '').trim()
     const stdout = (result.stdout || '').trim()
+    const outputFile = options.outputFile ? `\nFull output: ${options.outputFile}` : ''
     fail(
       `${command} ${args.join(' ')} failed with exit ${result.status}` +
-        (stderr ? `\n${stderr}` : stdout ? `\n${stdout}` : ''),
+        (stderr ? `\n${stderr}` : stdout ? `\n${stdout}` : outputFile),
     )
   }
 
@@ -516,6 +534,10 @@ function main() {
   const outputPath = path.join(ledgerDir, 'codex-review-output.json')
   const promptPath = path.join(ledgerDir, 'prompt.md')
   const schemaPath = path.join(ledgerDir, 'local-output-schema.json')
+  const runId = new Date().toISOString().replace(/[:.]/g, '-')
+  const runDir = path.join(ledgerDir, 'runs', runId)
+  const codexLogPath = path.join(runDir, 'codex-exec.log')
+  const displayCodexLogPath = path.relative(repoRoot, codexLogPath) || codexLogPath
 
   const previousState = opts.reset ? null : loadJsonIfExists(statePath)
   const previousReview = opts.reset ? '' : readFileIfExists(reviewPath)
@@ -602,19 +624,25 @@ function main() {
   const beforeSignature = worktreeMutationSignature(repoRoot)
   const started = Date.now()
   console.error('[local-code-review] Review in progress - do not modify the repository until this process exits')
+  console.error(`[local-code-review] Verbose Codex output: ${displayCodexLogPath}`)
   const codexResult = run('codex', codexArgs, {
     cwd: repoRoot,
     input: prompt,
-    inherit: true,
+    outputFile: codexLogPath,
     allowFailure: true,
   })
   const durationSeconds = Math.round((Date.now() - started) / 1000)
   const afterSignature = worktreeMutationSignature(repoRoot)
 
   if (afterSignature !== beforeSignature) {
-    fail('Codex changed the worktree during review. Inspect git status and diff before continuing.')
+    fail(
+      `Codex changed the worktree during review. Inspect git status and diff before continuing. ` +
+        `Verbose output: ${displayCodexLogPath}`,
+    )
   }
-  if (codexResult.status !== 0) fail(`codex exec failed with exit ${codexResult.status}`)
+  if (codexResult.status !== 0) {
+    fail(`codex exec failed with exit ${codexResult.status}. Verbose output: ${displayCodexLogPath}`)
+  }
   if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
     fail('codex exec produced no structured review output')
   }
@@ -633,8 +661,7 @@ function main() {
   writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`)
   writeFile(reviewPath, `${reviewMarkdown}\n`)
 
-  const runId = new Date().toISOString().replace(/[:.]/g, '-')
-  copyLedgerSnapshot(ledgerDir, path.join(ledgerDir, 'runs', runId))
+  copyLedgerSnapshot(ledgerDir, runDir)
 
   console.error(`[local-code-review] Review completed in ${durationSeconds}s`)
   console.error(`[local-code-review] Review: ${reviewPath}`)

@@ -8,6 +8,13 @@ Within each date, every change should get its own `### <Change title>` section. 
 
 ## 2026-07-23
 
+### Keep Reviewer Transcripts Out of Driver Context
+
+- Capture verbose `codex exec` stdout and stderr in a Git-private log for each local review run.
+- Print only short runner status lines and the final Markdown review to the invoking agent.
+- Add regression coverage that prevents verbose reviewer output from leaking through successful or
+  failed runs.
+
 ### Add Local Review Operating Modes
 
 - Add a default review-and-report mode and an explicit autonomous remediation mode to
