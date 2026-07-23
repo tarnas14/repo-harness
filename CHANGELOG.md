@@ -6,6 +6,17 @@ Entries are grouped by ISO 8601 dates (`YYYY-MM-DD`). This repository does not m
 
 Within each date, every change should get its own `### <Change title>` section. Add new sections above older sections for the same day. This keeps diffs clean and avoids growing one large mixed list.
 
+## 2026-07-23
+
+### Add Local Review Operating Modes
+
+- Add a default review-and-report mode and an explicit autonomous remediation mode to
+  `local-code-review`.
+- Require the main agent to assess every reviewer finding against the full task context, fix only
+  actionable findings, and record reasons for deferred or rejected findings.
+- Define completion by the main agent's assessment and relevant validation instead of requiring the
+  reviewer to return an `OK` verdict.
+
 ## 2026-07-13
 
 ### Update the Bundled Review Bot Model and Codex CLI
