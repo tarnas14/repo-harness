@@ -8,6 +8,14 @@ Within each date, every change should get its own `### <Change title>` section. 
 
 ## 2026-07-24
 
+### Make local-code-review Self-Contained
+
+- Remove repo-harness references from the skill description, prompts, runner help, and README:
+  the skill can be installed standalone in projects that have no bundle context.
+- Point to the source repository by URL where context helps (CI bot skill, ExecPlan template,
+  driver eval).
+- Add a repository convention: skill content must not assume the bundle context.
+
 ### Harden the Autonomous Review Loop Against Scope Growth
 
 - Require a scope anchor (goal, non-goals, usage profile) and visible per-finding dispositions

@@ -25,7 +25,7 @@ function envPositiveInteger(name, fallback) {
 function usage() {
   return `Usage: run-local-review.cjs [options]
 
-Run the repo-harness local review workflow using Codex exec plus a local continuity ledger.
+Run the local code review workflow using Codex exec plus a local continuity ledger.
 
 Options:
   --repo-dir DIR        Repository to review (default: current working directory)

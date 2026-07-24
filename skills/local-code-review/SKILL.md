@@ -1,14 +1,14 @@
 ---
 name: local-code-review
-description: Run a high-signal Codex code review locally from a checked-out repository, with the repo-harness review prompt and local continuity ledger. Use when reviewing a local branch, commit, uncommitted changes, or PR on your own machine without installing the GitHub Action bot. Supports review-and-report by default and explicit autonomous remediation loops where the main agent assesses findings, fixes only actionable issues, validates the changes, and repeats until the work is complete.
+description: Run a high-signal Codex code review locally from a checked-out repository, with a bundled staff-level review prompt and a local continuity ledger. Use when reviewing a local branch, commit, uncommitted changes, or PR on your own machine without installing the GitHub Action bot. Supports review-and-report by default and explicit autonomous remediation loops where the main agent assesses findings, fixes only actionable issues, validates the changes, and repeats until the work is complete.
 license: MIT
 ---
 
 # Local Code Review
 
-Run the repo-harness review prompt locally with a lightweight continuity ledger. This skill does not
-install workflows, set GitHub secrets, or post GitHub comments. Use `install-code-review-bot` for
-the CI bot.
+Run a bundled staff-level review prompt locally with a lightweight continuity ledger. This skill
+does not install workflows, set GitHub secrets, or post GitHub comments. If you need a CI review
+bot instead, see the `install-code-review-bot` skill in this skill's source repository.
 
 ## Requirements
 
@@ -121,9 +121,10 @@ The same rules apply whether the reviewed artifact is a plan or code.
   re-raising them, and filters them out of open issues and the verdict.
 - `actionable now` findings need no ledger entry: the fix plus its regression test is the record.
 - Decisions that must outlive the loop (product-level rejections, consciously accepted risk,
-  "we deliberately do not handle X") additionally go into the work's ExecPlan Decision Log with
-  the finding ID. The ledger dies with the checkout; committed artifacts are the project's
-  memory. When no plan exists, use the repository's documented decision or tech-debt location.
+  "we deliberately do not handle X") additionally go into the project's plan or decision log
+  (an ExecPlan Decision Log where the project uses one) with the finding ID. The ledger dies
+  with the checkout; committed artifacts are the project's memory. When no plan exists, use the
+  repository's documented decision or tech-debt location.
 
 ## Do not touch the target repository during a run
 

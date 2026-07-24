@@ -238,14 +238,15 @@ Two different lifetimes, two different homes:
 - **The ledger is loop memory.** It lives with the checkout and dies with it (pruned worktrees
   take their ledgers along). Right for continuity, dispositions, and run artifacts.
 - **Committed artifacts are project memory.** Decisions that must outlive the loop - product
-  rejections, consciously accepted risk - additionally go into the work's ExecPlan Decision Log
-  with the finding ID. The repo-harness ExecPlan template bakes this in.
+  rejections, consciously accepted risk - additionally go into the project's plan or decision
+  log with the finding ID. The ExecPlan template in this skill's source repository
+  (https://github.com/kjendrzyca/repo-harness) bakes this in.
 
 ## Testing the driver, not just the reviewer
 
-`evals/local-code-review-driver/` (in the repository root) evaluates the other half of the
-system: whether a driver model following this skill actually produces visible dispositions and
-refuses scope growth. The fixture mixes real in-scope bugs with tempting scope-expanders
+The skill's source repository ships a driver eval (`evals/local-code-review-driver/`, not part
+of the installed skill) that evaluates the other half of the system: whether a driver model
+following this skill actually produces visible dispositions and refuses scope growth. The fixture mixes real in-scope bugs with tempting scope-expanders
 (persistent claim registries, credential generations, exactly-once outboxes); the grader accepts
 only explicit disposition labels near each finding ID - negations, buried prose, and borrowed
 verdicts never count.
