@@ -26,6 +26,10 @@ the worktree; inspect those scripts as source instead.
 
 ${SCOPE_INSTRUCTIONS}
 
+${REVIEW_CONTRACT_SECTION}
+
+${OWNER_DISPOSITIONS_SECTION}
+
 ## Continuity
 
 Previous structured state:
@@ -46,6 +50,7 @@ Use the previous state as the continuity source of truth:
 - Preserve stable issue IDs for still-open issues.
 - If the current code resolves a previous open issue, move it to `recently_resolved_issues` and mention it briefly in the review.
 - If history was rewritten or the previous head no longer exists, use prior issues as hints but rebuild state from the current code.
+- Owner Dispositions above override this list: a dispositioned finding stays out of `open_issues` and out of the verdict.
 
 ## Repository Guidelines
 
@@ -123,6 +128,7 @@ Rules:
 - Do not invent issues.
 - Use repository-relative file paths in review output and continuity state. Do not use absolute local paths.
 - No concrete failure scenario means not P0/P1.
+- Suggested fixes must stay proportional to the change under review: do not propose new guarantees, persistent state, schedulers, or lifecycle mechanisms the change does not need. If the change itself grows beyond its stated purpose, report the scope growth as an issue instead of proposing machinery to support it.
 - Do not comment on formatting, lint, naming preferences, missing docs, or missing tests unless there is a specific bug risk.
 - When deciding verdict, include still-open P0/P1 issues from prior state.
 - `state.open_issues` must contain all currently open issues, including prior open issues that still apply.

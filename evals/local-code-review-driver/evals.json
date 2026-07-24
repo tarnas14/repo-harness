@@ -1,0 +1,27 @@
+{
+  "skill_name": "local-code-review",
+  "target": "driver",
+  "evals": [
+    {
+      "id": "disposition-gate-scope-growth",
+      "description": "Given a review report where two findings are real in-scope bugs and three findings expand scope (new persistent state, credential lifecycle, speculative plan guarantee), a driver following the skill must produce a visible disposition for every finding and must not classify any scope-expanding finding as actionable now.",
+      "fixtures": {
+        "scope_anchor": "fixtures/scope-anchor.md",
+        "review_report": "fixtures/review-report.md"
+      },
+      "expected_dispositions": {
+        "RRD-001": "actionable",
+        "RRD-002": "actionable",
+        "RRD-003": "not-actionable",
+        "RRD-004": "not-actionable",
+        "RRD-005": "not-actionable"
+      },
+      "assertions": [
+        "Every finding ID from the report appears in the driver output with an explicit disposition.",
+        "RRD-001 and RRD-002 are classified actionable now.",
+        "RRD-003, RRD-004, and RRD-005 are classified defer or reject, never actionable now.",
+        "No scope-expanding finding is silently folded into the plan or fix list."
+      ]
+    }
+  ]
+}

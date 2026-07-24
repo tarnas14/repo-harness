@@ -6,6 +6,63 @@ Entries are grouped by ISO 8601 dates (`YYYY-MM-DD`). This repository does not m
 
 Within each date, every change should get its own `### <Change title>` section. Add new sections above older sections for the same day. This keeps diffs clean and avoids growing one large mixed list.
 
+## 2026-07-24
+
+### Harden the Autonomous Review Loop Against Scope Growth
+
+- Require a scope anchor (goal, non-goals, usage profile) and visible per-finding dispositions
+  before any edit.
+- Scope-impact rule: fixes that add guarantees, persistent state, schedulers, or lifecycles
+  default to defer and need owner approval.
+- Convergence protocol instead of open-ended looping: stop after two passes with nothing new, on
+  a second re-raise of a rejected finding, or when findings drift beyond the anchor.
+- Dispositions must be persisted outside the conversation; design-level rejections also go into
+  the ExecPlan Decision Log with the finding ID (template updated).
+
+### Record Owner Dispositions in the Continuity Ledger
+
+- Add `dispositions.json`: rejected/deferred findings are injected into the reviewer prompt with
+  a do-not-re-raise instruction and filtered out of open issues and the verdict.
+- Append an "Effective verdict after owner dispositions" note when the reviewer still mentions or
+  re-emits a dispositioned finding.
+- Materially new evidence requires a fresh finding ID; the old ID stays filtered.
+- Validate disposition IDs against the chain's cumulative `known_issue_ids`; unknown IDs fail
+  early. Legacy states migrate from the latest successful run's snapshot.
+- The "already reviewed" skip also hashes goal, non-goals, focus, and dispositions, so changed
+  review inputs trigger a fresh pass on an unchanged checkout.
+- `--reset` rotates `dispositions.json` aside, but only after the reset pass succeeds.
+- Warn when open findings from the previous pass have no recorded disposition.
+
+### Make Failed Review Runs Unusable as Evidence
+
+- Reviewer output reaches the ledger root only on success; failed runs (nonzero exit, mutation
+  guard, timeout) quarantine it as `codex-review-output.rejected.json`.
+- Stop with a broken-continuity error when earlier runs never persisted `state.json`; `--reset`
+  starts over explicitly.
+- Promote artifacts in a safe order: continuity state first, reset-disposition rotation last.
+
+### Scope-Aware Mutation Guard and Built-In Timeout
+
+- Exclude gitignored runtime artifacts from the mutation guard fingerprint.
+- Report which paths changed when the guard fails; content changes in already-dirty files are
+  reported as candidate lists.
+- Kill hung reviewer runs after `--timeout-min` (default 20 minutes).
+
+### Pass a Review Contract to the Reviewer
+
+- Add `--goal`, `--non-goals`, and `--focus`; the reviewer judges findings against the owner's
+  scope and reports scope growth as a finding instead of proposing machinery for it.
+
+### Add a Driver Disposition Eval
+
+- Add `evals/local-code-review-driver/`: fixture findings (real in-scope bugs plus
+  scope-expanders) and a runner that grades any driver command on visible dispositions and
+  refusal of scope growth.
+- The grader accepts only explicit labels near the finding's own ID; negations, buried prose, and
+  cross-finding borrowing never count. Covered by unit tests.
+- Ignore `evals/local-code-review-driver/workspaces/` (generated transcripts may contain
+  machine-local paths).
+
 ## 2026-07-23
 
 ### Keep Reviewer Transcripts Out of Driver Context

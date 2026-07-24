@@ -201,6 +201,7 @@ Document parallel implementation strategies in the Plan of Work and include clea
 ## Living Plans and Design Decisions
 
 * ExecPlans are living documents. As you make key design decisions, update the plan to record both the decision and the thinking behind it. Record all decisions in the `Decision Log` section.
+* Code-review finding dispositions with design significance belong in the `Decision Log` too, during planning and implementation alike: when a review finding is rejected or deferred for product or scope reasons, record it with the finding ID and the rationale. Accepted-and-fixed findings need no entry - the fix and its regression test are the record.
 * ExecPlans must contain and maintain a `Progress` section, a `Surprises & Discoveries` section, a `Decision Log`, and an `Outcomes & Retrospective` section. These are not optional.
 * When you discover optimizer behavior, performance tradeoffs, unexpected bugs, or inverse/unapply semantics that shaped your approach, capture those observations in the `Surprises & Discoveries` section with short evidence snippets (test output is ideal).
 * If you change course mid-implementation, document why in the `Decision Log` and reflect the implications in `Progress`. Plans are guides for the next contributor as much as checklists for you.
@@ -265,6 +266,13 @@ Record every decision made while working on the plan in the format:
 
 - Decision: ...
   Rationale: ...
+  Date/Author: ...
+
+When a decision disposes of a code-review finding, include the finding ID:
+
+- Decision: Rejected review finding RR-012 (cross-job duplicate fence).
+  Rationale: Conflicts with the approved single-send scope; revisit only
+  with a demonstrated failure on real data.
   Date/Author: ...
 
 ## Outcomes & Retrospective

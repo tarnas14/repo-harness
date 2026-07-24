@@ -10,8 +10,9 @@ const SCRIPT_DIR = __dirname
 const SKILL_ROOT = path.resolve(SCRIPT_DIR, '..')
 const PROMPT_TEMPLATE = path.join(SKILL_ROOT, 'references', 'review-prompt.md')
 const OUTPUT_SCHEMA = path.join(SKILL_ROOT, 'assets', 'local-output-schema.json')
-const MAX_IGNORED_CONTENT_BYTES = 50 * 1024 * 1024
 const MAX_GIT_OUTPUT_BUFFER_BYTES = envPositiveInteger('CODEX_REVIEW_MAX_GIT_OUTPUT_BUFFER_BYTES', 64 * 1024 * 1024)
+const DEFAULT_TIMEOUT_MINUTES = envPositiveInteger('CODEX_REVIEW_TIMEOUT_MIN', 20)
+const MAX_REPORTED_MUTATED_PATHS = 20
 
 function envPositiveInteger(name, fallback) {
   const raw = process.env[name]
@@ -40,6 +41,10 @@ Options:
   --reasoning EFFORT    Reasoning effort config (default: CODEX_REASONING or high)
   --sandbox MODE        Codex sandbox_mode config (default: CODEX_SANDBOX_MODE or workspace-write)
   --web-search MODE     Codex web_search config (default: CODEX_WEB_SEARCH_MODE or disabled)
+  --goal TEXT           Review contract: what the change under review is supposed to deliver
+  --non-goals TEXT      Review contract: what is explicitly out of scope for this change
+  --focus PATH          Focus the review on this file (repeatable); other changes are context only
+  --timeout-min N       Kill the reviewer after N minutes (default: CODEX_REVIEW_TIMEOUT_MIN or 20; 0 disables)
   --no-codex            Build prompt and copy schema, but do not run Codex
   -h, --help            Show this help
 
@@ -71,6 +76,10 @@ function parseArgs(argv) {
     reasoning: process.env.CODEX_REASONING || 'high',
     sandbox: process.env.CODEX_SANDBOX_MODE || 'workspace-write',
     webSearch: process.env.CODEX_WEB_SEARCH_MODE || 'disabled',
+    goal: '',
+    nonGoals: '',
+    focus: [],
+    timeoutMin: DEFAULT_TIMEOUT_MINUTES,
     noCodex: false,
   }
 
@@ -85,6 +94,10 @@ function parseArgs(argv) {
     '--reasoning',
     '--sandbox',
     '--web-search',
+    '--goal',
+    '--non-goals',
+    '--focus',
+    '--timeout-min',
   ])
 
   for (let i = 0; i < argv.length; i++) {
@@ -116,6 +129,14 @@ function parseArgs(argv) {
       else if (arg === '--reasoning') opts.reasoning = value
       else if (arg === '--sandbox') opts.sandbox = value
       else if (arg === '--web-search') opts.webSearch = value
+      else if (arg === '--goal') opts.goal = value
+      else if (arg === '--non-goals') opts.nonGoals = value
+      else if (arg === '--focus') opts.focus.push(value)
+      else if (arg === '--timeout-min') {
+        const parsed = Number.parseFloat(value)
+        if (!Number.isFinite(parsed) || parsed < 0) fail('--timeout-min must be a non-negative number')
+        opts.timeoutMin = parsed
+      }
     } else if (arg === '--uncommitted') {
       opts.uncommitted = true
     } else if (arg === '--reset') {
@@ -150,6 +171,8 @@ function run(command, args, options = {}) {
       input: options.input,
       encoding: 'utf8',
       maxBuffer: options.maxBuffer ?? MAX_GIT_OUTPUT_BUFFER_BYTES,
+      timeout: options.timeoutMs,
+      killSignal: 'SIGKILL',
       stdio:
         outputFileDescriptor !== undefined
           ? ['pipe', outputFileDescriptor, outputFileDescriptor]
@@ -169,6 +192,7 @@ function run(command, args, options = {}) {
           'Refusing to continue because the review mutation guard would be incomplete.',
       )
     }
+    if (options.allowFailure) return result
     fail(`${command} failed to start: ${result.error.message}`)
   }
 
@@ -349,30 +373,314 @@ function currentHeadRef(repoRoot) {
   return '(detached)'
 }
 
-function worktreeMutationSignature(repoRoot) {
+// Gitignored files are deliberately excluded from the mutation signature: they are never part of
+// any review scope (branch, commit, or uncommitted), so runtime artifacts such as build output,
+// caches, or dev-server logs must not invalidate a review or break ledger continuity.
+function worktreeMutationSignatureObject(repoRoot) {
   const untracked = gitNullList(repoRoot, ['ls-files', '--others', '--exclude-standard', '-z'])
-  const ignored = gitNullList(repoRoot, ['ls-files', '--others', '--ignored', '--exclude-standard', '-z'])
-  return JSON.stringify({
+  return {
     headSha: gitText(repoRoot, ['rev-parse', 'HEAD']),
     headRef: currentHeadRef(repoRoot),
+    stagedNames: gitNullList(repoRoot, ['diff', '--cached', '--name-only', '-z']),
+    unstagedNames: gitNullList(repoRoot, ['diff', '--name-only', '-z']),
     unstagedDiff: gitRaw(repoRoot, ['diff', '--binary', '--no-ext-diff']),
     stagedDiff: gitRaw(repoRoot, ['diff', '--cached', '--binary', '--no-ext-diff']),
     untrackedFiles: fingerprintWorktreeFiles(repoRoot, untracked),
-    ignoredFiles: fingerprintWorktreeFiles(repoRoot, ignored, { maxContentBytes: MAX_IGNORED_CONTENT_BYTES }),
-    statusIncludingIgnored: gitRaw(repoRoot, ['status', '--short', '--untracked-files=all', '--ignored=matching']),
-  })
+    status: gitRaw(repoRoot, ['status', '--short', '--untracked-files=all']),
+  }
 }
 
 function worktreeMutationFingerprint(repoRoot) {
-  return sha256(worktreeMutationSignature(repoRoot))
+  return sha256(JSON.stringify(worktreeMutationSignatureObject(repoRoot)))
+}
+
+function diffNameLists(label, before, after, reasons) {
+  const beforeSet = new Set(before)
+  const afterSet = new Set(after)
+  for (const name of after) {
+    if (!beforeSet.has(name)) reasons.push(`${label} added: ${name}`)
+  }
+  for (const name of before) {
+    if (!afterSet.has(name)) reasons.push(`${label} removed: ${name}`)
+  }
+}
+
+function describeMutation(before, after) {
+  const reasons = []
+
+  if (before.headSha !== after.headSha) reasons.push(`HEAD moved: ${before.headSha} -> ${after.headSha}`)
+  if (before.headRef !== after.headRef) reasons.push(`HEAD ref changed: ${before.headRef} -> ${after.headRef}`)
+
+  diffNameLists('staged file', before.stagedNames, after.stagedNames, reasons)
+  diffNameLists('unstaged file', before.unstagedNames, after.unstagedNames, reasons)
+
+  const beforeUntracked = new Map(before.untrackedFiles.map((entry) => [entry.path, JSON.stringify(entry)]))
+  const afterUntracked = new Map(after.untrackedFiles.map((entry) => [entry.path, JSON.stringify(entry)]))
+  for (const [file, entry] of afterUntracked) {
+    if (!beforeUntracked.has(file)) reasons.push(`untracked file added: ${file}`)
+    else if (beforeUntracked.get(file) !== entry) reasons.push(`untracked file changed: ${file}`)
+  }
+  for (const file of beforeUntracked.keys()) {
+    if (!afterUntracked.has(file)) reasons.push(`untracked file removed: ${file}`)
+  }
+
+  // For content changes inside already-dirty files the aggregate diffs cannot name the exact
+  // culprit, so these entries list candidates. Both staged and unstaged changes are always
+  // reported independently.
+  if (before.stagedDiff !== after.stagedDiff) {
+    reasons.push(`staged content changed in one of: ${after.stagedNames.join(', ') || '(unknown files)'}`)
+  }
+  if (before.unstagedDiff !== after.unstagedDiff) {
+    reasons.push(`unstaged content changed in one of: ${after.unstagedNames.join(', ') || '(unknown files)'}`)
+  }
+  if (!reasons.length && before.status !== after.status) {
+    reasons.push('git status output changed (see git status)')
+  }
+
+  const truncated = reasons.length > MAX_REPORTED_MUTATED_PATHS
+  const shown = reasons.slice(0, MAX_REPORTED_MUTATED_PATHS)
+  if (truncated) shown.push(`... and ${reasons.length - MAX_REPORTED_MUTATED_PATHS} more changes`)
+  return shown
 }
 
 function copyLedgerSnapshot(ledgerDir, runDir) {
   fs.mkdirSync(runDir, { recursive: true })
-  for (const name of ['prompt.md', 'codex-review-output.json', 'review.md', 'state.json']) {
+  for (const name of ['prompt.md', 'codex-review-output.json', 'review.md', 'state.json', 'dispositions.json']) {
     const source = path.join(ledgerDir, name)
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(runDir, name))
   }
+}
+
+const REJECTED_OUTPUT_NAME = 'codex-review-output.rejected.json'
+
+// A failed run must not leave a usable-looking findings file behind: rename the structured output
+// so nothing downstream can mistake it for a valid review result.
+function quarantineFailedRunOutput(runDir, outputRunPath) {
+  if (!fs.existsSync(outputRunPath)) return ''
+  const rejectedPath = path.join(runDir, REJECTED_OUTPUT_NAME)
+  fs.renameSync(outputRunPath, rejectedPath)
+  return rejectedPath
+}
+
+// Finding IDs are only meaningful within one continuity chain: after --reset a fresh reviewer can
+// assign the same ID to an unrelated finding, so stale dispositions would silently suppress it.
+// Rotation happens only when the new chain's state is actually promoted - a failed or --no-codex
+// reset pass must leave the still-current chain's dispositions untouched. Rotate aside instead of
+// deleting, so the owner's decisions stay inspectable.
+function rotateDispositionsForNewChain(ledgerDir, runId) {
+  const dispositionsPath = path.join(ledgerDir, 'dispositions.json')
+  if (!fs.existsSync(dispositionsPath)) return
+  const rotatedPath = path.join(ledgerDir, `dispositions.reset-${runId}.json`)
+  fs.renameSync(dispositionsPath, rotatedPath)
+  console.error(
+    `[local-code-review] --reset rotated recorded dispositions to ${path.basename(rotatedPath)}; ` +
+      'the new review chain starts without them.',
+  )
+}
+
+function loadDispositions(ledgerDir) {
+  const dispositionsPath = path.join(ledgerDir, 'dispositions.json')
+  if (!fs.existsSync(dispositionsPath)) return []
+
+  let parsed
+  try {
+    parsed = JSON.parse(fs.readFileSync(dispositionsPath, 'utf8'))
+  } catch (error) {
+    fail(`could not parse ${dispositionsPath}: ${error.message}`)
+  }
+
+  const entries = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.dispositions) ? parsed.dispositions : null
+  if (!entries) fail(`${dispositionsPath} must be an array of dispositions or {"dispositions": [...]}`)
+
+  for (const entry of entries) {
+    if (!entry || typeof entry.id !== 'string' || !entry.id) {
+      fail(`${dispositionsPath}: every disposition needs a string "id" matching a finding id`)
+    }
+    if (entry.disposition !== 'rejected' && entry.disposition !== 'deferred') {
+      fail(`${dispositionsPath}: disposition for ${entry.id} must be "rejected" or "deferred" (accepted findings are recorded by their fix, not here)`)
+    }
+    if (typeof entry.reason !== 'string' || !entry.reason.trim()) {
+      fail(`${dispositionsPath}: disposition for ${entry.id} needs a non-empty "reason"`)
+    }
+  }
+
+  return entries
+}
+
+function knownIssueIds(state) {
+  const ids = new Set()
+  if (!state) return ids
+  if (Array.isArray(state.known_issue_ids)) for (const id of state.known_issue_ids) ids.add(id)
+  for (const issue of state.open_issues || []) if (issue && issue.id) ids.add(issue.id)
+  for (const issue of state.recently_resolved_issues || []) if (issue && issue.id) ids.add(issue.id)
+  return ids
+}
+
+// Migration source for states written before known_issue_ids existed: the dispositions.json
+// snapshot of the latest successful run proves which dispositions were already active in this
+// chain, because every successful pass copies the current file into its run directory.
+function latestSuccessfulRunDispositionIds(ledgerDir) {
+  const runsDir = path.join(ledgerDir, 'runs')
+  const ids = new Set()
+  if (!fs.existsSync(runsDir)) return ids
+
+  for (const name of fs.readdirSync(runsDir).sort().reverse()) {
+    const runDir = path.join(runsDir, name)
+    if (!fs.existsSync(path.join(runDir, 'state.json'))) continue
+    const snapshotPath = path.join(runDir, 'dispositions.json')
+    if (fs.existsSync(snapshotPath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'))
+        const entries = Array.isArray(parsed) ? parsed : parsed?.dispositions || []
+        for (const entry of entries) if (entry && entry.id) ids.add(entry.id)
+      } catch {
+        // An unreadable snapshot proves nothing; fall through with what we have.
+      }
+    }
+    return ids
+  }
+  return ids
+}
+
+// A disposition may only name a finding this chain has actually reported. Without this check a
+// mistyped ID passes silently and can suppress a future, unrelated finding that happens to
+// receive that ID - the exact silent-suppression failure the disposition feature must never have.
+// For states predating known_issue_ids, the chain memory is reconstructed from the previous
+// state's IDs plus the latest successful run's disposition snapshot - never taken on faith.
+function requireDispositionsBoundToChain(dispositions, previousState, ledgerDir) {
+  if (!dispositions.length) return
+
+  const known = knownIssueIds(previousState)
+  if (previousState && !Array.isArray(previousState.known_issue_ids)) {
+    console.error(
+      '[local-code-review] previous state predates known_issue_ids; validating dispositions against the latest successful run snapshot.',
+    )
+    for (const id of latestSuccessfulRunDispositionIds(ledgerDir)) known.add(id)
+  }
+
+  const unknown = dispositions.filter((entry) => !known.has(entry.id)).map((entry) => entry.id)
+  if (unknown.length) {
+    fail(
+      `dispositions.json references IDs unknown to this review chain: ${unknown.join(', ')}. ` +
+        'A disposition must name a finding a previous pass reported (check for typos). ' +
+        'Remove the unknown entries, or use --reset to deliberately start a fresh chain.',
+    )
+  }
+}
+
+function ownerDispositionsSection(dispositions) {
+  if (!dispositions.length) return ''
+  const list = JSON.stringify(dispositions, null, 2)
+  return [
+    '## Owner Dispositions',
+    '',
+    'The repository owner consciously dispositioned these findings. Each ID below names exactly',
+    'that incarnation of the finding: do not re-emit it, do not count it toward the verdict, and',
+    'do not keep it in `open_issues`. If materially new evidence defeats the recorded reason -',
+    'changed code in the relevant area, or a concrete failure scenario the reason does not cover -',
+    'report it as a NEW finding under a fresh ID and reference the dispositioned ID in its',
+    'description. Never reuse a dispositioned ID. If you merely disagree, say so once under',
+    'Questions instead of reporting the finding again.',
+    '',
+    '```json',
+    list,
+    '```',
+    '',
+  ].join('\n')
+}
+
+function reviewContractSection(opts) {
+  if (!opts.goal && !opts.nonGoals && !opts.focus.length) return ''
+  const lines = ['## Review Contract', '']
+  if (opts.goal) lines.push(`- Goal of the change under review: ${opts.goal}`)
+  if (opts.nonGoals) lines.push(`- Explicit non-goals: ${opts.nonGoals}`)
+  if (opts.focus.length) lines.push(`- Focus files: ${opts.focus.join(', ')} (treat other changes in scope as context only)`)
+  lines.push(
+    '',
+    'Judge findings against this contract. Do not propose new guarantees, persistent state,',
+    'schedulers, or lifecycle mechanisms beyond the stated goal. If the change under review itself',
+    'grows beyond the goal, report that scope growth as a finding instead of designing machinery',
+    'to support it.',
+    '',
+  )
+  return lines.join('\n')
+}
+
+// Continuity is the loop's brake: when earlier runs produced review output that was never
+// persisted into state.json, every later pass silently degrades into a fresh full review.
+// Detect that and stop instead of looping.
+function requireHealthyContinuity(ledgerDir, previousState, reset) {
+  if (reset || previousState) return
+
+  const runsDir = path.join(ledgerDir, 'runs')
+  if (!fs.existsSync(runsDir)) return
+
+  const priorRuns = fs.readdirSync(runsDir).filter((name) => {
+    const dir = path.join(runsDir, name)
+    return fs.existsSync(path.join(dir, REJECTED_OUTPUT_NAME)) ||
+      (fs.existsSync(path.join(dir, 'codex-review-output.json')) && !fs.existsSync(path.join(dir, 'state.json')))
+  })
+
+  // Legacy runner versions wrote the structured output straight into the ledger root and only
+  // snapshotted it into the run directory on success, so a stray root-level output without
+  // state.json is the same broken-continuity signal.
+  if (!priorRuns.length && fs.existsSync(path.join(ledgerDir, 'codex-review-output.json'))) {
+    priorRuns.push('(ledger root output without state.json)')
+  }
+
+  if (priorRuns.length) {
+    fail(
+      `continuity ledger is broken: ${priorRuns.length} earlier run(s) produced review output that was never persisted ` +
+        `(no state.json exists), so this pass would silently restart from scratch.\n` +
+        `Inspect the failed runs under ${runsDir} (mutation guard or reviewer errors), fix the cause, ` +
+        'then rerun. Pass --reset only to deliberately start a fresh continuity chain.',
+    )
+  }
+}
+
+function computeVerdict(openIssues) {
+  if (openIssues.some((issue) => issue.severity === 'P0')) return 'BLOCK'
+  if (openIssues.some((issue) => issue.severity === 'P1')) return 'ATTENTION'
+  return 'OK'
+}
+
+// The reviewer is instructed to keep dispositioned findings out of its verdict, but the runner
+// must not depend on reviewer obedience: if the human-facing report still counts a dispositioned
+// finding, the persisted review would say ATTENTION while the ledger says no open issues, and an
+// autonomous loop would keep working a settled finding. Append the authoritative effective
+// verdict instead of rewriting the reviewer's words.
+function reconcileVerdictWithDispositions(reviewMarkdown, openIssues, dispositions) {
+  if (!dispositions.length) return reviewMarkdown
+
+  const effective = computeVerdict(openIssues)
+  const reviewerVerdict = reviewMarkdown.match(/Verdict:\s*(BLOCK|ATTENTION|OK)/)?.[1]
+  const reEmitted = dispositions.filter((entry) => reviewMarkdown.includes(entry.id))
+  if (!reEmitted.length && (!reviewerVerdict || reviewerVerdict === effective)) return reviewMarkdown
+
+  const reEmittedNote = reEmitted.length
+    ? ` The reviewer mentioned or re-emitted owner-dispositioned findings; they are excluded here: ${reEmitted
+        .map((entry) => `${entry.id} (${entry.disposition})`)
+        .join(', ')}.`
+    : ''
+  return (
+    `${reviewMarkdown}\n\n---\n\n` +
+    `[local-code-review] Effective verdict after owner dispositions: ${effective}.` +
+    reEmittedNote +
+    ' Continuity state and this effective verdict are authoritative for the review loop.'
+  )
+}
+
+function warnAboutUndispositionedFindings(previousState, dispositions) {
+  const openIssues = previousState?.open_issues || []
+  if (!openIssues.length) return
+  const dispositioned = new Set(dispositions.map((entry) => entry.id))
+  const undispositioned = openIssues.filter((issue) => issue.id && !dispositioned.has(issue.id))
+  if (!undispositioned.length) return
+  console.error(
+    `[local-code-review] ${undispositioned.length} open finding(s) from the previous pass have no recorded disposition: ` +
+      `${undispositioned.map((issue) => issue.id).join(', ')}. ` +
+      'Findings you are fixing now need no entry; record rejected/deferred ones in dispositions.json so later passes stop re-raising them.',
+  )
 }
 
 function resolveLedgerDir(repoRoot, requested) {
@@ -498,15 +806,32 @@ function scopeInstructions(scope) {
   ].join('\n')
 }
 
-function normalizeState(outputState, previousState, headSha, reviewNumber, currentScopeKey) {
+function normalizeState(outputState, previousState, headSha, reviewNumber, currentScopeKey, dispositions = [], contextKey = '') {
   const state = outputState && typeof outputState === 'object' ? outputState : {}
   state.schema_version = 1
   state.last_reviewed_head_sha = headSha
   state.scope_key = currentScopeKey
+  state.review_context_key = contextKey
   state.review_count = reviewNumber
   state.updated_at = new Date().toISOString()
   if (!Array.isArray(state.open_issues)) state.open_issues = []
   if (!Array.isArray(state.recently_resolved_issues)) state.recently_resolved_issues = []
+
+  // The chain's cumulative ID memory: every ID any pass has reported, including ones later
+  // filtered by dispositions. Validated disposition IDs are added explicitly because an obedient
+  // reviewer stops emitting them - without this they would fall out of the chain's memory and
+  // their own dispositions would be rejected as unknown on later passes.
+  const known = knownIssueIds(previousState)
+  for (const issue of state.open_issues) if (issue && issue.id) known.add(issue.id)
+  for (const issue of state.recently_resolved_issues) if (issue && issue.id) known.add(issue.id)
+  for (const entry of dispositions) known.add(entry.id)
+  state.known_issue_ids = [...known].sort()
+
+  // Owner-dispositioned findings are conscious decisions, not open work: keep them out of
+  // open_issues so they stop driving verdicts, and out of resolved so they do not read as fixed.
+  const dispositionedIds = new Set(dispositions.map((entry) => entry.id))
+  state.open_issues = state.open_issues.filter((issue) => !dispositionedIds.has(issue.id))
+  state.recently_resolved_issues = state.recently_resolved_issues.filter((issue) => !dispositionedIds.has(issue?.id))
 
   for (const issue of state.open_issues) {
     if (!issue.first_seen_head_sha) issue.first_seen_head_sha = headSha
@@ -541,13 +866,27 @@ function main() {
 
   const previousState = opts.reset ? null : loadJsonIfExists(statePath)
   const previousReview = opts.reset ? '' : readFileIfExists(reviewPath)
+  requireHealthyContinuity(ledgerDir, previousState, opts.reset)
+  // A reset pass previews the new chain (no old dispositions in prompt or filtering), but the
+  // file itself is rotated only after the pass succeeds.
+  const dispositions = opts.reset ? [] : loadDispositions(ledgerDir)
+  requireDispositionsBoundToChain(dispositions, previousState, ledgerDir)
+  warnAboutUndispositionedFindings(previousState, dispositions)
   const reviewNumber = Number(previousState?.review_count || 0) + 1
+  // The skip identity covers the semantic review inputs, not just repository content: a changed
+  // goal, non-goals, focus set, or disposition list must trigger a fresh pass on an unchanged
+  // checkout instead of leaving the previous prompt and verdict authoritative for different
+  // inputs.
+  const currentContextKey = sha256(
+    JSON.stringify({ goal: opts.goal, nonGoals: opts.nonGoals, focus: opts.focus, dispositions }),
+  )
   const alreadyReviewed =
     !opts.reset &&
     !opts.force &&
     previousState?.last_reviewed_head_sha &&
     previousState.last_reviewed_head_sha === scope.headSha &&
-    previousState.scope_key === currentScopeKey
+    previousState.scope_key === currentScopeKey &&
+    previousState.review_context_key === currentContextKey
 
   if (alreadyReviewed) {
     console.log(
@@ -581,6 +920,8 @@ function main() {
     REVIEW_NUMBER: reviewNumber,
     CONTINUITY_REASON: continuityReason,
     SCOPE_INSTRUCTIONS: scopeInstructions(scope),
+    REVIEW_CONTRACT_SECTION: reviewContractSection(opts),
+    OWNER_DISPOSITIONS_SECTION: ownerDispositionsSection(dispositions),
     PREVIOUS_STATE_JSON: previousState ? JSON.stringify(previousState, null, 2) : '{}',
     PREVIOUS_REVIEW_MARKDOWN: previousReview || '(none)',
     GUIDELINES_SECTION: loadGuidelines(repoRoot),
@@ -598,6 +939,7 @@ function main() {
     process.exit(0)
   }
 
+  const outputRunPath = path.join(runDir, 'codex-review-output.json')
   const codexArgs = [
     'exec',
     '--ephemeral',
@@ -617,55 +959,97 @@ function main() {
     '--output-schema',
     schemaPath,
     '-o',
-    outputPath,
+    outputRunPath,
   ]
   codexArgs.push('-')
 
-  const beforeSignature = worktreeMutationSignature(repoRoot)
+  const beforeSignature = worktreeMutationSignatureObject(repoRoot)
   const started = Date.now()
   console.error('[local-code-review] Review in progress - do not modify the repository until this process exits')
   console.error(`[local-code-review] Verbose Codex output: ${displayCodexLogPath}`)
+  fs.mkdirSync(runDir, { recursive: true })
   const codexResult = run('codex', codexArgs, {
     cwd: repoRoot,
     input: prompt,
     outputFile: codexLogPath,
     allowFailure: true,
+    timeoutMs: opts.timeoutMin > 0 ? opts.timeoutMin * 60 * 1000 : undefined,
   })
   const durationSeconds = Math.round((Date.now() - started) / 1000)
-  const afterSignature = worktreeMutationSignature(repoRoot)
+  const afterSignature = worktreeMutationSignatureObject(repoRoot)
 
-  if (afterSignature !== beforeSignature) {
-    fail(
-      `Codex changed the worktree during review. Inspect git status and diff before continuing. ` +
-        `Verbose output: ${displayCodexLogPath}`,
+  const failures = []
+  if (JSON.stringify(afterSignature) !== JSON.stringify(beforeSignature)) {
+    const changes = describeMutation(beforeSignature, afterSignature)
+    failures.push(
+      'The worktree changed during the review, so the reviewed scope is no longer trustworthy.\n' +
+        `Changed:\n${changes.map((line) => `  - ${line}`).join('\n')}\n` +
+        'Stop concurrent processes writing into the repo (dev servers, builds, editors) or review a separate git worktree.',
     )
   }
-  if (codexResult.status !== 0) {
-    fail(`codex exec failed with exit ${codexResult.status}. Verbose output: ${displayCodexLogPath}`)
+  if (codexResult.error && codexResult.error.code === 'ETIMEDOUT') {
+    failures.push(
+      `codex exec exceeded the ${opts.timeoutMin} minute timeout and was killed. ` +
+        'Healthy passes finish well under this limit, so this is almost certainly a hang, not deep thinking. ' +
+        'Rerun the review; raise --timeout-min only if the reviewed scope is genuinely huge.',
+    )
+  } else if (codexResult.error) {
+    failures.push(`codex failed to start: ${codexResult.error.message}`)
+  } else if (codexResult.status !== 0) {
+    failures.push(`codex exec failed with exit ${codexResult.status}.`)
   }
-  if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
+
+  if (failures.length) {
+    const rejectedPath = quarantineFailedRunOutput(runDir, outputRunPath)
+    writeFile(path.join(runDir, 'prompt.md'), prompt)
+    const quarantineNote = rejectedPath
+      ? `\nThe run produced structured output, but the run failed: it was quarantined as ${rejectedPath}. Do not use its findings.`
+      : ''
+    fail(`${failures.join('\n')}${quarantineNote}\nVerbose output: ${displayCodexLogPath}`)
+  }
+
+  if (!fs.existsSync(outputRunPath) || fs.statSync(outputRunPath).size === 0) {
     fail('codex exec produced no structured review output')
   }
 
   let output
   try {
-    output = JSON.parse(fs.readFileSync(outputPath, 'utf8'))
+    output = JSON.parse(fs.readFileSync(outputRunPath, 'utf8'))
   } catch (error) {
-    fail(`could not parse ${outputPath}: ${error.message}`)
+    const rejectedPath = quarantineFailedRunOutput(runDir, outputRunPath)
+    fail(`could not parse structured review output: ${error.message}. Quarantined as ${rejectedPath}. Do not use its findings.`)
   }
 
   const reviewMarkdown = String(output.review_markdown || '').trim()
-  if (!reviewMarkdown) fail('structured output did not include review_markdown')
+  if (!reviewMarkdown) {
+    const rejectedPath = quarantineFailedRunOutput(runDir, outputRunPath)
+    fail(`structured output did not include review_markdown. Quarantined as ${rejectedPath}. Do not use its findings.`)
+  }
 
-  const state = normalizeState(output.state, previousState, scope.headSha, reviewNumber, currentScopeKey)
+  const state = normalizeState(
+    output.state,
+    previousState,
+    scope.headSha,
+    reviewNumber,
+    currentScopeKey,
+    dispositions,
+    currentContextKey,
+  )
+  const finalReviewMarkdown = reconcileVerdictWithDispositions(reviewMarkdown, state.open_issues, dispositions)
+  // Promotion order matters if a write fails midway: continuity state first (it is the
+  // authoritative artifact), reset-disposition rotation last (never rotate for a chain that was
+  // not promoted). No transactional machinery beyond ordering - this is a local single-user
+  // tool and the next pass re-reviews the scope anyway.
   writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`)
-  writeFile(reviewPath, `${reviewMarkdown}\n`)
+  writeFile(reviewPath, `${finalReviewMarkdown}\n`)
+  fs.copyFileSync(outputRunPath, outputPath)
+  if (opts.reset) rotateDispositionsForNewChain(ledgerDir, runId)
 
   copyLedgerSnapshot(ledgerDir, runDir)
 
   console.error(`[local-code-review] Review completed in ${durationSeconds}s`)
   console.error(`[local-code-review] Review: ${reviewPath}`)
-  console.log(reviewMarkdown)
+  console.log(finalReviewMarkdown)
 }
 
 main()
