@@ -8,6 +8,17 @@ Within each date, every change should get its own `### <Change title>` section. 
 
 ## 2026-07-26
 
+### Close the Review Loop on the First Clean Pass
+
+- Replace the two-consecutive-clean-passes stop rule: the loop closes on the first pass that
+  yields no newly accepted findings, with every still-open finding carrying a recorded
+  disposition. No confirmation pass on an unchanged checkout; later stages (implementation,
+  tooling, the next review) cover the residual risk of a single clean sample.
+- The stop condition is phrased in driver-side facts checkable when the pass returns; the
+  effective `OK` verdict is a consequence, not a state to chase with another pass.
+- The closing pass must have seen the final state: fixes always get one more pass; never end the
+  loop with fixes no pass has reviewed.
+
 ### Add a Bird's Eye View Section to the ExecPlan Template
 
 - Add a mandatory-for-architecture-changes "Bird's Eye View" section to the ExecPlan skeleton:

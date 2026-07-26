@@ -155,16 +155,22 @@ loops turn a one-request feature into a distributed-systems project.
 
 ### The convergence protocol
 
-The loop stops on falling yield, not on a clean verdict:
+The loop stops on the first clean pass, not on repeated confirmation:
 
-- two consecutive passes with nothing new close the loop;
+- a pass closes the loop when the driver accepts nothing new from it and every finding still open
+  carries a recorded disposition - both checkable the moment the pass returns; no extra pass to
+  watch the verdict turn `OK`;
+- the closing pass must have seen the final state: fixes always get one more pass before the
+  loop ends;
 - a rejected finding re-raised a second time closes the loop;
 - findings drifting from concrete defects into speculation beyond the anchor close the loop.
 
 There is no fixed pass cap, and a reviewer `OK` is not required. A single pass is a sample, not
 an exhaustive audit - reviewers surface a few high-signal issues per pass and go deeper as the
-obvious ones clear. Healthy loops routinely run 10-20+ passes and stay cheap; unhealthy loops
-are the ones chasing a clean verdict.
+obvious ones clear. Re-sampling an unchanged checkout to confirm a clean pass buys little: later
+stages (implementation, compilers and linters, the next review) cover the residual risk. Healthy
+loops routinely run 10-20+ passes and stay cheap; unhealthy loops are the ones chasing a clean
+verdict.
 
 ### Owner dispositions (`dispositions.json`)
 

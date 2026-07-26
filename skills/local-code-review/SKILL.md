@@ -90,8 +90,14 @@ to `defer`.
 
 Convergence protocol (stop conditions):
 
-- Every pass must either surface at least one newly accepted finding or be a declared
-  confirmation pass. After two consecutive passes with nothing new, close the loop.
+- Close the loop on the first clean pass: one that yields no newly accepted findings, where every
+  finding still open afterwards carries a recorded disposition. Both facts are yours to check the
+  moment the pass returns. Do not run another pass to watch the effective verdict turn `OK` -
+  with all open findings dispositioned, it is `OK` by construction. Reviewer passes are samples,
+  not proofs; later stages (implementation, compilers and linters, the next review) cover the
+  residual risk of a single clean sample.
+- The closing pass must have seen the final state: after fixing accepted findings, run one pass
+  on the fixed checkout and judge its result. Never end the loop with fixes no pass has reviewed.
 - When a rejected finding is re-raised a second time, close the loop or keep the documented
   rejection; do not re-litigate it.
 - When findings drift from concrete defects into speculative guarantees beyond the scope anchor,
