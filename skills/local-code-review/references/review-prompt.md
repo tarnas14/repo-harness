@@ -11,6 +11,11 @@ Do not create, edit, delete, format, or generate files during the review. Use re
 commands. Do not run eval scripts, fixture generators, formatters, or test commands that write into
 the worktree; inspect those scripts as source instead.
 
+Keep search output bounded. Always pass `--max-columns=240` to `rg`; piping through `head` does
+not cap bytes when a generated file stores its content in one huge line. Scope searches with
+`--glob` to the file types under review, and skip generated data files (datasets, fixtures,
+lockfiles) unless the change under review touches them.
+
 ## Review Context
 
 - Title: ${REVIEW_TITLE}

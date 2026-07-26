@@ -8,6 +8,13 @@ Within each date, every change should get its own `### <Change title>` section. 
 
 ## 2026-07-26
 
+### Bound Reviewer Search Output
+
+- Add a search-hygiene rule to both review prompts: always use `rg --max-columns=240`, scope
+  searches with `--glob`, and skip generated data files unless the change touches them. A broad
+  `rg` over source trees was collaterally matching single-line generated files (eval datasets),
+  flooding a single command output with hundreds of kilobytes of noise that `head` cannot cap.
+
 ### Silence the Undispositioned-Findings Warning When the Checkout Changed
 
 - Warn about open findings without a recorded disposition only when the checkout is unchanged
