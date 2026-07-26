@@ -460,6 +460,21 @@ test('warns when previous open findings have no recorded disposition', (t) => {
   assert.match(second.stderr, /RR-FIX-002/)
 })
 
+test('fixing the checkout between passes silences the undispositioned warning', (t) => {
+  const fixture = createFixture(t)
+
+  const first = runReview(fixture, [], { FAKE_CODEX_FINDING_ID: 'RR-FIX-002' })
+  assert.equal(first.status, 0, first.stderr)
+
+  fs.appendFileSync(path.join(fixture.repoDir, 'README.md'), 'fix for RR-FIX-002\n')
+  run('git', ['add', 'README.md'], { cwd: fixture.repoDir })
+  run('git', ['commit', '--quiet', '-m', 'Fix finding'], { cwd: fixture.repoDir })
+
+  const second = runReview(fixture, [], { FAKE_CODEX_FINDING_ID: 'RR-FIX-002' })
+  assert.equal(second.status, 0, second.stderr)
+  assert.doesNotMatch(second.stderr, /no recorded disposition/)
+})
+
 test('review contract flags land in the prompt', (t) => {
   const fixture = createFixture(t)
   const result = runReview(fixture, [

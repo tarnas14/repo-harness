@@ -207,8 +207,9 @@ Use `--no-codex` to build and inspect the prompt/schema without spending a model
 - Owner dispositions recorded in the ledger's `dispositions.json` are injected into the reviewer
   prompt and removed from open issues and the verdict, so consciously rejected or deferred findings
   stop coming back. If the reviewer re-emits one anyway, the runner appends an authoritative
-  "Effective verdict after owner dispositions" note to the review. The runner warns when open
-  findings from the previous pass have no recorded disposition.
+  "Effective verdict after owner dispositions" note to the review. The runner warns when the
+  checkout is unchanged since the previous pass and open findings still have no recorded
+  disposition - the loop is then neither fixing nor dispositioning them.
 - Branch and commit reviews require a clean worktree so Codex reads exactly the committed scope under
   review. Use `--uncommitted` when staged, unstaged, or untracked local changes are part of the scope.
 - Commit reviews also require the reviewed commit to be checked out as `HEAD`; use a temporary git

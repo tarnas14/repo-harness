@@ -6,6 +6,14 @@ Entries are grouped by ISO 8601 dates (`YYYY-MM-DD`). This repository does not m
 
 Within each date, every change should get its own `### <Change title>` section. Add new sections above older sections for the same day. This keeps diffs clean and avoids growing one large mixed list.
 
+## 2026-07-26
+
+### Silence the Undispositioned-Findings Warning When the Checkout Changed
+
+- Warn about open findings without a recorded disposition only when the checkout is unchanged
+  since the previous pass (and not on `--reset`). Fix-then-rerun loops no longer see the warning
+  on every pass, so it fires only when the loop is neither fixing nor dispositioning findings.
+
 ## 2026-07-24
 
 ### Make local-code-review Self-Contained

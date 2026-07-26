@@ -670,16 +670,21 @@ function reconcileVerdictWithDispositions(reviewMarkdown, openIssues, dispositio
   )
 }
 
-function warnAboutUndispositionedFindings(previousState, dispositions) {
+// Warn only when the checkout is unchanged since the previous pass: open findings without a
+// disposition are then neither fixed nor rejected/deferred, so the loop is spinning without
+// acting. When the scope content changed, the driver is presumably fixing findings and the
+// reviewer will reconcile them, so a warning would be a chronic false positive.
+function warnAboutUndispositionedFindings(previousState, dispositions, scopeUnchanged) {
+  if (!scopeUnchanged) return
   const openIssues = previousState?.open_issues || []
   if (!openIssues.length) return
   const dispositioned = new Set(dispositions.map((entry) => entry.id))
   const undispositioned = openIssues.filter((issue) => issue.id && !dispositioned.has(issue.id))
   if (!undispositioned.length) return
   console.error(
-    `[local-code-review] ${undispositioned.length} open finding(s) from the previous pass have no recorded disposition: ` +
-      `${undispositioned.map((issue) => issue.id).join(', ')}. ` +
-      'Findings you are fixing now need no entry; record rejected/deferred ones in dispositions.json so later passes stop re-raising them.',
+    `[local-code-review] Nothing changed since the previous pass, but ${undispositioned.length} open finding(s) ` +
+      `have no recorded disposition: ${undispositioned.map((issue) => issue.id).join(', ')}. ` +
+      'Fix them or record rejected/deferred entries in dispositions.json so later passes stop re-raising them.',
   )
 }
 
@@ -871,7 +876,11 @@ function main() {
   // file itself is rotated only after the pass succeeds.
   const dispositions = opts.reset ? [] : loadDispositions(ledgerDir)
   requireDispositionsBoundToChain(dispositions, previousState, ledgerDir)
-  warnAboutUndispositionedFindings(previousState, dispositions)
+  warnAboutUndispositionedFindings(
+    previousState,
+    dispositions,
+    !opts.reset && previousState?.scope_key === currentScopeKey,
+  )
   const reviewNumber = Number(previousState?.review_count || 0) + 1
   // The skip identity covers the semantic review inputs, not just repository content: a changed
   // goal, non-goals, focus set, or disposition list must trigger a fresh pass on an unchanged
