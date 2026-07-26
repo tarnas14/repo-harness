@@ -8,6 +8,13 @@ Within each date, every change should get its own `### <Change title>` section. 
 
 ## 2026-07-26
 
+### Add a Bird's Eye View Section to the ExecPlan Template
+
+- Add a mandatory-for-architecture-changes "Bird's Eye View" section to the ExecPlan skeleton:
+  before/after ASCII diagrams, a REMOVED/ADDED/UNCHANGED key-changes table, and a data flow
+  trace, scannable in under 60 seconds.
+- Add a matching "start with a visual map" guideline.
+
 ### Bound Reviewer Search Output
 
 - Add a search-hygiene rule to both review prompts: always use `rg --max-columns=240`, scope

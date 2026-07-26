@@ -83,6 +83,8 @@ Question discipline and placement:
 - When a question is answered, create a Decision Log entry with rationale and update the affected sections. Remove the item from Open Questions.
 - Prefer at most 3-7 active questions; timebox low-impact ones or convert them into explicit Assumptions.
 
+Start with a visual map. Before diving into prose, draw a bird's eye view of the architecture - before and after. ASCII diagrams of data flow, component relationships, and what changes vs stays the same. This orients the reader faster than any paragraph and doubles as a review artifact for product managers and senior engineers.
+
 Anchor the plan with observable outcomes. State what the user can do after implementation, the commands to run, and the outputs they should see. Acceptance should be phrased as behavior a human can verify ("after starting the dev server and navigating to /dashboard, the new metrics panel is visible") rather than internal attributes ("added a MetricsPanel component"). If a change is internal, explain how its impact can still be demonstrated (for example, by running tests that fail before and pass after).
 
 Specify repository context explicitly. Name files with full repository-relative paths, name functions and modules precisely, and describe where new files should be created. If touching multiple areas, include a short orientation paragraph that explains how those parts fit together so a novice can navigate confidently. When running commands, show the working directory and exact command line. When outcomes depend on environment, state the assumptions and provide alternatives when reasonable.
@@ -226,6 +228,34 @@ docs/exec-plans/create-plan-file.md.
 
 Explain in a few sentences what someone gains after this change and how
 they can see it working. State the user-visible behavior you will enable.
+
+## Bird's Eye View
+
+Provide a visual overview of the architecture before and after this change.
+This section is mandatory for any plan that modifies system architecture,
+adds new services, or changes data flow. It should be scannable by a
+product manager or engineer in under 60 seconds.
+
+Include:
+
+1. **Before/After comparison** - show the current flow and the proposed
+   flow side by side using ASCII diagrams. Name the components, tools,
+   services, and data stores involved.
+
+2. **Key changes table** - a compact list of what is removed, what is
+   added, and what stays the same. Use columns like REMOVED / ADDED /
+   UNCHANGED.
+
+3. **Data flow diagram** - trace a request from the user through the
+   system to the final output. Show where data is created, stored,
+   transformed, and displayed.
+
+Keep diagrams in indented ASCII art (4 spaces). Use boxes, arrows, and
+labels. Do not use Mermaid or other rendering formats - the plan must be
+readable as plain text.
+
+For small, single-file changes this section can be omitted. If in doubt,
+include it - a 10-line diagram is worth 200 lines of prose.
 
 ## Assumptions
 
