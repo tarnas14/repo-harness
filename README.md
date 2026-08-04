@@ -42,6 +42,10 @@ The ExecPlan template in [`skills/repo-harness/assets/exec-plans/create-plan-fil
 
 ## Extras
 
+- [`coding-review-local`](skills/coding-review-local/SKILL.md) - provider-selectable local review
+  skill for Codex, Claude Code, and GitHub Copilot. Codex remains the default; Claude defaults to
+  Fable/high and Copilot to GPT-5.6 Sol/high. Install:
+  `npx skills add github.com/kjendrzyca/repo-harness --skill coding-review-local`.
 - [`local-code-review`](skills/local-code-review/SKILL.md) - local Codex review skill. It runs the repo-harness
   review prompt from a checked-out repository, stores a Git-private continuity ledger, marks fixed
   prior findings as resolved, and prints the Markdown verdict. Install:

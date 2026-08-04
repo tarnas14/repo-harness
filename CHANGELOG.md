@@ -6,6 +6,24 @@ Entries are grouped by ISO 8601 dates (`YYYY-MM-DD`). This repository does not m
 
 Within each date, every change should get its own `### <Change title>` section. Add new sections above older sections for the same day. This keeps diffs clean and avoids growing one large mixed list.
 
+## 2026-08-04
+
+### Add a Provider-Selectable Local Review Skill
+
+- Add `coding-review-local` as a separate skill so the existing Codex-only `local-code-review`
+  contract stays unchanged.
+- Keep Codex as the default reviewer and add explicit Claude Code and GitHub Copilot providers,
+  with Fable/high and GPT-5.6 Sol/high as their production defaults.
+- Collect exact scope artifacts in Git-private metadata, restrict Claude and Copilot to read/search
+  tools, parse each CLI's structured output format, and preserve one continuity ledger across
+  provider or model switches.
+- Validate provider output before normalization and reject missing, blank, duplicate, or conflicting
+  finding IDs.
+- Require prior open findings to remain open, resolve, or have an owner disposition when providers
+  switch.
+- Add provider command tests, fail-closed output tests, mutation-guard coverage, and real low-cost
+  smoke tests for Claude Code and GitHub Copilot.
+
 ## 2026-07-26
 
 ### Close the Review Loop on the First Clean Pass
