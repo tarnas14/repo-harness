@@ -107,6 +107,7 @@ Supported comment options:
 ## Security Notes
 
 - The workflow uses `pull_request_target` so it can access secrets, but it only runs automatically for same-repo PRs.
+- The trusted review-script checkout does not persist credentials and is removed before PR code is checked out.
 - The PR is checked out by head SHA with `persist-credentials: false`.
 - `GITHUB_TOKEN` is not passed to Codex.
 - Codex runs with network disabled by default.

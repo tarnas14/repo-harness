@@ -8,6 +8,14 @@ Within each date, every change should get its own `### <Change title>` section. 
 
 ## 2026-08-04
 
+### Keep Review Credentials and State Failures Isolated
+
+- Disable credential persistence for the trusted review-script checkout and remove that checkout
+  before pull request code is exposed to Codex.
+- Stop post-processing when the summary comment cannot be published so unpublished reviews never
+  advance the persisted review state.
+- Add regression coverage for both guarantees.
+
 ### Add a Provider-Selectable Local Review Skill
 
 - Add `coding-review-local` as a separate skill so the existing Codex-only `local-code-review`

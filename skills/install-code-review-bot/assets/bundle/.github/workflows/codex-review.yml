@@ -21,6 +21,7 @@
 #   - Intended for private repositories only; do not install this workflow in public repos
 #   - Uses pull_request_target for secret access (only same-repo PRs)
 #   - GITHUB_TOKEN is NOT passed to Codex
+#   - Trusted review scripts are copied without persisted credentials, then their checkout is removed
 #   - Checkout uses the PR head SHA directly, with persist-credentials: false
 #   - Codex runs in workspace-write sandbox (default) with network disabled
 #   - Dirty-tree check fails the job if Codex modifies tracked files
@@ -215,10 +216,13 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/scripts/codex-review
           path: __review-scripts
+          persist-credentials: false
 
       - name: Copy review scripts to /tmp
         if: steps.skip.outputs.skip != 'true'
-        run: cp -r __review-scripts/.github/scripts/codex-review /tmp/codex-review-scripts
+        run: |
+          cp -r __review-scripts/.github/scripts/codex-review /tmp/codex-review-scripts
+          rm -rf __review-scripts
 
       - name: Checkout PR
         if: steps.skip.outputs.skip != 'true'

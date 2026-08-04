@@ -594,8 +594,8 @@ function parseCommand(commentBody) {
 // ─── Post-Processing Orchestrator ─────────────────────────────────────────────
 
 /**
- * Orchestrate all post-review actions with error isolation.
- * Each step is independent — failures don't cascade.
+ * Orchestrate all post-review actions.
+ * The summary is required before state can advance; later steps are best-effort.
  *
  * Order: post comment → persist state → mark stale → update check
  * This prioritizes user-visible output over internal bookkeeping.
@@ -646,6 +646,7 @@ async function postResults({
     log(`Posted ${formatReviewLabel(reviewNumber)} (comment ${newCommentId})`)
   } catch (e) {
     log(`Failed to post comment: ${e.message}`)
+    throw e
   }
 
   // Step 2: Reconcile inline review lifecycle (best-effort, after summary)
