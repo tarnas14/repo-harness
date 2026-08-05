@@ -6,6 +6,18 @@ Entries are grouped by ISO 8601 dates (`YYYY-MM-DD`). This repository does not m
 
 Within each date, every change should get its own `### <Change title>` section. Add new sections above older sections for the same day. This keeps diffs clean and avoids growing one large mixed list.
 
+## 2026-08-05
+
+### Harden Provider-Selectable Local Review State
+
+- Keep every ledger inside Git metadata and force Codex into a read-only sandbox without disabling
+  the user's Codex config or rules.
+- Validate canonical continuity state and issue records before reviewer invocation, write
+  `state.json` last, and restore prior canonical artifacts after caught promotion failures.
+- Derive the saved Markdown verdict from structured issue state.
+- Let a fresh ledger retry after a known failed output was quarantined.
+- Add regression coverage for each accepted failure mode.
+
 ## 2026-08-04
 
 ### Keep Review Credentials and State Failures Isolated

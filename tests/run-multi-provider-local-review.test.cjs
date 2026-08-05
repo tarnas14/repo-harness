@@ -96,8 +96,20 @@ if (process.env.FAKE_OMIT_STATE_METADATA === '1') {
 }
 
 if ('${provider}' === 'codex') {
+  const path = require('node:path')
   const outputIndex = process.argv.indexOf('-o')
   const outputPath = process.argv[outputIndex + 1]
+  const ledgerDir = path.dirname(path.dirname(path.dirname(outputPath)))
+  if (process.env.FAKE_BLOCK_REVIEW_PROMOTION === '1') {
+    const reviewPath = path.join(ledgerDir, 'review.md')
+    fs.rmSync(reviewPath, { recursive: true, force: true })
+    fs.mkdirSync(reviewPath)
+  }
+  if (process.env.FAKE_BLOCK_STATE_PROMOTION === '1') {
+    const statePath = path.join(ledgerDir, 'state.json')
+    fs.rmSync(statePath, { recursive: true, force: true })
+    fs.mkdirSync(statePath)
+  }
   fs.writeFileSync(outputPath, JSON.stringify(output))
   process.stdout.write('verbose codex output\\n')
 } else if ('${provider}' === 'claude') {
@@ -183,7 +195,7 @@ test('Codex remains the default provider with the existing production defaults',
   const args = reviewerArgs(fixture)
   assert.equal(args[0], 'exec')
   assert.equal(valueAfter(args, '--model'), 'gpt-5.6-sol')
-  assert.equal(valueAfter(args, '--sandbox'), 'workspace-write')
+  assert.equal(valueAfter(args, '--sandbox'), 'read-only')
   assert.ok(args.includes('model_reasoning_effort="high"'))
   assert.ok(args.includes('sandbox_workspace_write.network_access=false'))
   assert.ok(!args.includes('--ignore-user-config'))
@@ -191,6 +203,15 @@ test('Codex remains the default provider with the existing production defaults',
 
   const prompt = fs.readFileSync(path.join(ledgerDir(fixture.repoDir), 'prompt.md'), 'utf8')
   assert.match(prompt, /git show --find-renames --unified=80/)
+})
+
+test('Codex rejects write-capable sandbox overrides', (t) => {
+  const fixture = createFixture(t)
+  const result = runReview(fixture, ['--sandbox', 'workspace-write'])
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Codex sandbox is fixed to read-only/)
+  assert.ok(!fs.existsSync(fixture.argsPath), 'reviewer must not start with a write-capable sandbox')
 })
 
 test('Claude uses fable/high, native schema output, and read-only tools', (t) => {
@@ -261,6 +282,51 @@ test('switching providers reruns the same scope and preserves continuity', (t) =
   assert.match(third.stdout, /No new scope to review/)
 })
 
+test('a quarantined first pass does not poison a fresh ledger', (t) => {
+  const fixture = createFixture(t)
+  const failed = runReview(fixture, ['--provider', 'copilot'], { FAKE_OMIT_STATE_METADATA: '1' })
+  assert.equal(failed.status, 1)
+
+  const recovered = runReview(fixture, ['--provider', 'copilot'])
+  assert.equal(recovered.status, 0, recovered.stderr)
+  assert.match(recovered.stdout, /Verdict: OK/)
+})
+
+test('malformed canonical state fails closed before starting the reviewer', (t) => {
+  const fixture = createFixture(t)
+  const first = runReview(fixture)
+  assert.equal(first.status, 0, first.stderr)
+
+  const statePath = path.join(ledgerDir(fixture.repoDir), 'state.json')
+  fs.writeFileSync(statePath, '{}\n')
+  fs.rmSync(fixture.argsPath)
+
+  const second = runReview(fixture, ['--force'])
+  assert.equal(second.status, 1)
+  assert.match(second.stderr, /canonical review state is invalid/)
+  assert.match(second.stderr, /review_count/)
+  assert.ok(!fs.existsSync(fixture.argsPath), 'reviewer must not start with malformed continuity state')
+  assert.equal(fs.readFileSync(statePath, 'utf8'), '{}\n')
+})
+
+test('malformed canonical issue records fail before starting the reviewer', (t) => {
+  const fixture = createFixture(t)
+  const first = runReview(fixture)
+  assert.equal(first.status, 0, first.stderr)
+
+  const statePath = path.join(ledgerDir(fixture.repoDir), 'state.json')
+  const state = JSON.parse(fs.readFileSync(statePath, 'utf8'))
+  state.open_issues = [null]
+  fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`)
+  fs.rmSync(fixture.argsPath)
+
+  const second = runReview(fixture, ['--force'])
+  assert.equal(second.status, 1)
+  assert.match(second.stderr, /canonical review state is invalid/)
+  assert.match(second.stderr, /open issue must be a JSON object/)
+  assert.ok(!fs.existsSync(fixture.argsPath), 'reviewer must not start with malformed issue records')
+})
+
 test('provider switching fails closed when a prior open issue disappears', (t) => {
   const fixture = createFixture(t)
   const first = runReview(fixture, [], { FAKE_REVIEWER_FINDING_IDS: 'RR-CONT-001' })
@@ -312,6 +378,84 @@ test('an ID cannot be both open and resolved', (t) => {
   assert.equal(result.status, 1)
   assert.match(result.stderr, /finding ID appears as both open and resolved: RR-OVERLAP-001/)
   assert.ok(!fs.existsSync(path.join(ledgerDir(fixture.repoDir), 'state.json')))
+})
+
+test('structured issue state overrides a contradictory markdown verdict', (t) => {
+  const fixture = createFixture(t)
+  const result = runReview(fixture, [], {
+    FAKE_REVIEWER_FINDING_IDS: 'RR-VERDICT-001',
+    FAKE_REVIEWER_VERDICT: 'OK',
+  })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /Verdict: ATTENTION/)
+  assert.doesNotMatch(result.stdout, /Verdict: OK/)
+})
+
+test('rejects custom ledgers outside Git metadata', (t) => {
+  const fixture = createFixture(t)
+  const customLedger = path.join(fixture.repoDir, '.review-ledger')
+  const result = runReview(fixture, ['--ledger-dir', customLedger])
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /ledger directory must stay inside Git metadata/)
+  assert.ok(!fs.existsSync(customLedger))
+})
+
+test('a failed canonical review write preserves the previous state marker', (t) => {
+  const fixture = createFixture(t)
+  const first = runReview(fixture)
+  assert.equal(first.status, 0, first.stderr)
+  const statePath = path.join(ledgerDir(fixture.repoDir), 'state.json')
+  const previousState = fs.readFileSync(statePath, 'utf8')
+
+  const failed = runReview(fixture, ['--force'], { FAKE_BLOCK_REVIEW_PROMOTION: '1' })
+  assert.equal(failed.status, 1)
+  assert.equal(fs.readFileSync(statePath, 'utf8'), previousState)
+
+  const runsDir = path.join(ledgerDir(fixture.repoDir), 'runs')
+  const failedRunDir = fs.readdirSync(runsDir)
+    .map((name) => path.join(runsDir, name))
+    .find((dir) => fs.existsSync(path.join(dir, 'reviewer-output.rejected.json')))
+  assert.ok(failedRunDir, 'failed run must retain quarantined output')
+  assert.ok(!fs.existsSync(path.join(failedRunDir, 'state.json')), 'failed run must not look successful')
+  assert.ok(!fs.existsSync(path.join(failedRunDir, 'review.md')), 'failed run must not keep a canonical review snapshot')
+})
+
+test('a failed re-review restores every previous canonical artifact', (t) => {
+  const fixture = createFixture(t)
+  const first = runReview(fixture)
+  assert.equal(first.status, 0, first.stderr)
+
+  const ledger = ledgerDir(fixture.repoDir)
+  const canonicalNames = ['state.json', 'review.md', 'reviewer-output.json']
+  const previous = Object.fromEntries(
+    canonicalNames.map((name) => [name, fs.readFileSync(path.join(ledger, name))]),
+  )
+
+  const failed = runReview(fixture, ['--force'], {
+    FAKE_BLOCK_STATE_PROMOTION: '1',
+    FAKE_REVIEWER_FINDING_IDS: 'RR-FAILED-001',
+  })
+  assert.equal(failed.status, 1)
+  for (const name of canonicalNames) {
+    assert.deepEqual(fs.readFileSync(path.join(ledger, name)), previous[name], `${name} must roll back`)
+  }
+})
+
+test('a failed first state promotion cleans canonical artifacts and allows retry', (t) => {
+  const fixture = createFixture(t)
+  const failed = runReview(fixture, [], { FAKE_BLOCK_STATE_PROMOTION: '1' })
+  assert.equal(failed.status, 1)
+
+  const ledger = ledgerDir(fixture.repoDir)
+  for (const name of ['state.json', 'review.md', 'reviewer-output.json']) {
+    assert.ok(!fs.existsSync(path.join(ledger, name)), `${name} must not survive failed first promotion`)
+  }
+
+  const recovered = runReview(fixture)
+  assert.equal(recovered.status, 0, recovered.stderr)
+  assert.match(recovered.stdout, /Verdict: OK/)
 })
 
 test('malformed provider output fails closed without updating continuity', (t) => {

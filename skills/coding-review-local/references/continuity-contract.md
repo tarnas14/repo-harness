@@ -28,17 +28,20 @@ bounded tail instead of loading a whole file into an agent context.
 
 ## Failed Runs
 
-- The runner writes the reviewer's structured output into the run directory first and promotes it
-  to the ledger root only on success. The ledger root never contains output from a failed run.
+- The runner writes the provider output and successful-run snapshot under `runs/<timestamp>/`
+  before changing canonical artifacts. It writes canonical `state.json` last as the success marker.
 - When a run fails (nonzero exit, mutation guard, timeout, unparsable output), any structured
   output is renamed to `reviewer-output.rejected.json`. Its findings must not be used, applied,
   or counted; the pass is treated as if it never happened.
-- When earlier runs produced review output but `state.json` was never written, continuity is
-  broken. The runner refuses to continue until the cause is fixed or `--reset` deliberately starts
-  a new chain.
+- Quarantined output is audit evidence of a known failed pass and does not block a fresh retry. A
+  caught promotion failure removes its run state/review snapshot and restores the prior canonical
+  artifacts, or removes partial canonical artifacts when no prior pass exists. Unquarantined output
+  without canonical `state.json` still means continuity may be broken; the runner refuses to
+  continue until the cause is fixed or `--reset` deliberately starts a new chain.
 
 ## Mutation Guard
 
+- Codex runs in a fixed read-only sandbox. Claude and Copilot receive read/search tools only.
 - The guard fingerprints HEAD, staged and unstaged diffs, untracked files, and the private scope
   artifacts before and after the reviewer runs. Any difference fails the run and reports which
   worktree paths changed.
@@ -88,6 +91,9 @@ bounded tail instead of loading a whole file into an agent context.
 
 ## State Rules
 
+- Canonical `state.json` must contain valid core fields and valid open/resolved issue records before
+  it can seed or suppress a pass. Malformed state fails before reviewer invocation unless `--reset`
+  deliberately starts over.
 - `scope_key` identifies the exact reviewed scope. It covers scope kind plus the resolved commit,
   base/merge-base, or uncommitted worktree fingerprint. A runner may skip only when both the head SHA
   and `scope_key` match the previous state.
@@ -106,8 +112,8 @@ bounded tail instead of loading a whole file into an agent context.
 - If an issue is fixed, remove it from `open_issues` and add it to `recently_resolved_issues`.
 - If history was rewritten and prior state may not align, use previous issues as hints but rebuild the state from the current code.
 - Every P0/P1 issue must include a concrete `failure_scenario`.
-- Custom ledger directories must be outside the target worktree or inside its Git metadata
-  directory. This keeps runner-owned logs and artifacts out of the review scope and mutation guard.
+- The ledger must stay inside the checkout's Git metadata. Custom paths outside `.git` are rejected
+  before the runner writes files.
 
 ## Severity Rules
 

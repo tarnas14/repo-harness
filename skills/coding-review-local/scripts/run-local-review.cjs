@@ -47,8 +47,8 @@ Options:
   --force               Review even if the same scope and reviewer settings were already reviewed
   --title TEXT          Review title shown in the prompt
   --pr-body-file FILE   Markdown/text file used as extra review context
-  --ledger-dir DIR      Store prompt/output/state here (default: Git-private coding-review-local path)
-  --sandbox MODE        Codex sandbox_mode config (default: CODEX_SANDBOX_MODE or workspace-write)
+  --ledger-dir DIR      Store state inside Git metadata (default: Git-private coding-review-local path)
+  --sandbox MODE        Codex-only compatibility flag; only read-only is accepted
   --web-search MODE     Codex-only web_search config (default: CODEX_WEB_SEARCH_MODE or disabled)
   --goal TEXT           Review contract: what the change under review is supposed to deliver
   --non-goals TEXT      Review contract: what is explicitly out of scope for this change
@@ -103,7 +103,7 @@ function parseArgs(argv) {
     ledgerDir: '',
     model: process.env.CODE_REVIEW_MODEL || '',
     reasoning: process.env.CODE_REVIEW_EFFORT || '',
-    sandbox: process.env.CODEX_SANDBOX_MODE || 'workspace-write',
+    sandbox: 'read-only',
     webSearch: process.env.CODEX_WEB_SEARCH_MODE || 'disabled',
     goal: '',
     nonGoals: '',
@@ -192,6 +192,9 @@ function parseArgs(argv) {
   const defaults = providerDefaults(opts.provider)
   if (!opts.model) opts.model = defaults.model
   if (!opts.reasoning) opts.reasoning = defaults.effort
+  if (opts.sandbox !== 'read-only') {
+    fail(`Codex sandbox is fixed to read-only; unsupported value: ${opts.sandbox}`)
+  }
 
   return opts
 }
@@ -318,8 +321,42 @@ function loadJsonIfExists(filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'))
   } catch (error) {
-    console.error(`[coding-review-local] ignoring invalid previous state: ${error.message}`)
-    return null
+    fail(
+      `canonical review state is invalid at ${filePath}: could not parse JSON: ${error.message}. ` +
+        'Repair the ledger or pass --reset to deliberately start a fresh continuity chain.',
+    )
+  }
+}
+
+function requireValidCanonicalState(state, statePath) {
+  if (state == null) return
+  const invalid = (reason) => fail(
+    `canonical review state is invalid at ${statePath}: ${reason}. ` +
+      'Repair the ledger or pass --reset to deliberately start a fresh continuity chain.',
+  )
+
+  if (!state || typeof state !== 'object' || Array.isArray(state)) invalid('state must be a JSON object')
+  if (!Number.isInteger(state.review_count) || state.review_count < 1) invalid('review_count must be a positive integer')
+  if (!Number.isInteger(state.schema_version)) invalid('schema_version must be an integer')
+  if (typeof state.last_reviewed_head_sha !== 'string') invalid('last_reviewed_head_sha must be a string')
+  if (typeof state.scope_key !== 'string') invalid('scope_key must be a string')
+  if (!Array.isArray(state.open_issues)) invalid('open_issues must be an array')
+  if (!Array.isArray(state.recently_resolved_issues)) invalid('recently_resolved_issues must be an array')
+  if (state.review_context_key != null && typeof state.review_context_key !== 'string') {
+    invalid('review_context_key must be a string when present')
+  }
+  if (state.known_issue_ids != null && !Array.isArray(state.known_issue_ids)) {
+    invalid('known_issue_ids must be an array when present')
+  }
+  if (Array.isArray(state.known_issue_ids)) {
+    for (const id of state.known_issue_ids) {
+      if (typeof id !== 'string' || !id.trim()) invalid('known_issue_ids must contain non-empty strings')
+    }
+  }
+  try {
+    validateIssueCollections(state)
+  } catch (error) {
+    invalid(error.message)
   }
 }
 
@@ -491,14 +528,6 @@ function describeMutation(before, after) {
   return shown
 }
 
-function copyLedgerSnapshot(ledgerDir, runDir) {
-  fs.mkdirSync(runDir, { recursive: true })
-  for (const name of ['prompt.md', 'reviewer-output.json', 'review.md', 'state.json', 'dispositions.json']) {
-    const source = path.join(ledgerDir, name)
-    if (fs.existsSync(source)) fs.copyFileSync(source, path.join(runDir, name))
-  }
-}
-
 const REJECTED_OUTPUT_NAME = 'reviewer-output.rejected.json'
 
 // A failed run must not leave a usable-looking findings file behind: rename the structured output
@@ -512,18 +541,14 @@ function quarantineFailedRunOutput(runDir, outputRunPath) {
 
 // Finding IDs are only meaningful within one continuity chain: after --reset a fresh reviewer can
 // assign the same ID to an unrelated finding, so stale dispositions would silently suppress it.
-// Rotation happens only when the new chain's state is actually promoted - a failed or --no-reviewer
-// reset pass must leave the still-current chain's dispositions untouched. Rotate aside instead of
-// deleting, so the owner's decisions stay inspectable.
+// Pair disposition rotation with state promotion. A caught promotion failure restores the current
+// chain's file; successful rotation stays inspectable instead of being deleted.
 function rotateDispositionsForNewChain(ledgerDir, runId) {
   const dispositionsPath = path.join(ledgerDir, 'dispositions.json')
-  if (!fs.existsSync(dispositionsPath)) return
+  if (!fs.existsSync(dispositionsPath)) return null
   const rotatedPath = path.join(ledgerDir, `dispositions.reset-${runId}.json`)
   fs.renameSync(dispositionsPath, rotatedPath)
-  console.error(
-    `[coding-review-local] --reset rotated recorded dispositions to ${path.basename(rotatedPath)}; ` +
-      'the new review chain starts without them.',
-  )
+  return { dispositionsPath, rotatedPath }
 }
 
 function loadDispositions(ledgerDir) {
@@ -665,8 +690,7 @@ function requireHealthyContinuity(ledgerDir, previousState, reset) {
 
   const priorRuns = fs.readdirSync(runsDir).filter((name) => {
     const dir = path.join(runsDir, name)
-    return fs.existsSync(path.join(dir, REJECTED_OUTPUT_NAME)) ||
-      (fs.existsSync(path.join(dir, 'reviewer-output.json')) && !fs.existsSync(path.join(dir, 'state.json')))
+    return fs.existsSync(path.join(dir, 'reviewer-output.json')) && !fs.existsSync(path.join(dir, 'state.json'))
   })
 
   // Legacy runner versions wrote the structured output straight into the ledger root and only
@@ -697,24 +721,37 @@ function computeVerdict(openIssues) {
 // finding, the persisted review would say ATTENTION while the ledger says no open issues, and an
 // autonomous loop would keep working a settled finding. Append the authoritative effective
 // verdict instead of rewriting the reviewer's words.
-function reconcileVerdictWithDispositions(reviewMarkdown, openIssues, dispositions) {
-  if (!dispositions.length) return reviewMarkdown
-
+function reconcileReviewVerdict(reviewMarkdown, openIssues, dispositions) {
   const effective = computeVerdict(openIssues)
-  const reviewerVerdict = reviewMarkdown.match(/Verdict:\s*(BLOCK|ATTENTION|OK)/)?.[1]
+  const verdictPattern = /Verdict:\s*(BLOCK|ATTENTION|OK)/
+  const reviewerVerdict = reviewMarkdown.match(verdictPattern)?.[1]
   const reEmitted = dispositions.filter((entry) => reviewMarkdown.includes(entry.id))
-  if (!reEmitted.length && (!reviewerVerdict || reviewerVerdict === effective)) return reviewMarkdown
+  let reconciled = reviewMarkdown
+  const notes = []
 
-  const reEmittedNote = reEmitted.length
-    ? ` The reviewer mentioned or re-emitted owner-dispositioned findings; they are excluded here: ${reEmitted
+  if (reviewerVerdict && reviewerVerdict !== effective) {
+    reconciled = reconciled.replace(verdictPattern, `Verdict: ${effective}`)
+    notes.push(`corrected reviewer verdict from ${reviewerVerdict} to ${effective}`)
+  } else if (!reviewerVerdict) {
+    notes.push(`reviewer output had no verdict line; effective verdict is ${effective}`)
+  }
+
+  if (reEmitted.length) {
+    notes.push(
+      `excluded owner-dispositioned findings re-emitted by the reviewer: ${reEmitted
         .map((entry) => `${entry.id} (${entry.disposition})`)
-        .join(', ')}.`
-    : ''
+        .join(', ')}`,
+    )
+  }
+
+  if (!notes.length) return reconciled
+  const label = dispositions.length
+    ? `Effective verdict after owner dispositions: ${effective}.`
+    : `Effective verdict: ${effective}.`
   return (
-    `${reviewMarkdown}\n\n---\n\n` +
-    `[coding-review-local] Effective verdict after owner dispositions: ${effective}.` +
-    reEmittedNote +
-    ' Continuity state and this effective verdict are authoritative for the review loop.'
+    `${reconciled}\n\n---\n\n` +
+    `[coding-review-local] ${label} ${notes.join('; ')}. ` +
+    'Continuity state and this effective verdict are authoritative for the review loop.'
   )
 }
 
@@ -739,6 +776,31 @@ function warnAboutUndispositionedFindings(previousState, dispositions, scopeUnch
 function resolveLedgerDir(repoRoot, requested) {
   if (requested) return path.resolve(repoRoot, requested)
   return path.resolve(repoRoot, gitText(repoRoot, ['rev-parse', '--git-path', LEDGER_NAME]))
+}
+
+function pathIsInside(parent, candidate) {
+  const relative = path.relative(parent, candidate)
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
+}
+
+function canonicalizePossiblyMissingPath(filePath) {
+  const missingParts = []
+  let existing = path.resolve(filePath)
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing)
+    if (parent === existing) return path.resolve(filePath)
+    missingParts.unshift(path.basename(existing))
+    existing = parent
+  }
+  return path.join(fs.realpathSync(existing), ...missingParts)
+}
+
+function requireLedgerInsideGitMetadata(repoRoot, ledgerDir) {
+  const gitDir = fs.realpathSync(path.resolve(gitText(repoRoot, ['rev-parse', '--absolute-git-dir'])))
+  const canonicalLedgerDir = canonicalizePossiblyMissingPath(ledgerDir)
+  if (!pathIsInside(gitDir, canonicalLedgerDir)) {
+    fail(`ledger directory must stay inside Git metadata (${gitDir}): ${ledgerDir}`)
+  }
 }
 
 function currentScope(opts, repoRoot) {
@@ -1196,6 +1258,43 @@ function requireStringFields(value, fields, label) {
   }
 }
 
+function validateIssueCollections(state) {
+  const issueFields = [
+    'id',
+    'severity',
+    'category',
+    'title',
+    'file',
+    'line_range',
+    'failure_scenario',
+    'suggested_fix',
+    'status',
+    'first_seen_head_sha',
+    'last_seen_head_sha',
+  ]
+  const openIds = new Set()
+  for (const issue of state.open_issues) {
+    requireExactObjectKeys(issue, issueFields, 'open issue')
+    requireStringFields(issue, issueFields, 'open issue')
+    if (!issue.id.trim()) throw new Error('finding ID must be non-empty')
+    if (openIds.has(issue.id)) throw new Error(`duplicate finding ID: ${issue.id}`)
+    openIds.add(issue.id)
+    if (!['P0', 'P1', 'P2'].includes(issue.severity)) throw new Error(`invalid issue severity: ${issue.severity}`)
+    if (issue.status !== 'open') throw new Error(`invalid issue status for ${issue.id}`)
+  }
+
+  const resolvedFields = ['id', 'resolved_in_head_sha', 'resolution']
+  const resolvedIds = new Set()
+  for (const issue of state.recently_resolved_issues) {
+    requireExactObjectKeys(issue, resolvedFields, 'resolved issue')
+    requireStringFields(issue, resolvedFields, 'resolved issue')
+    if (!issue.id.trim()) throw new Error('finding ID must be non-empty')
+    if (openIds.has(issue.id)) throw new Error(`finding ID appears as both open and resolved: ${issue.id}`)
+    if (resolvedIds.has(issue.id)) throw new Error(`duplicate finding ID: ${issue.id}`)
+    resolvedIds.add(issue.id)
+  }
+}
+
 function validateReviewerOutput(output) {
   requireExactObjectKeys(output, ['review_markdown', 'state'], 'structured output')
   if (typeof output.review_markdown !== 'string' || !output.review_markdown.trim()) {
@@ -1219,40 +1318,7 @@ function validateReviewerOutput(output) {
     throw new Error('structured state must include open_issues and recently_resolved_issues arrays')
   }
 
-  const issueFields = [
-    'id',
-    'severity',
-    'category',
-    'title',
-    'file',
-    'line_range',
-    'failure_scenario',
-    'suggested_fix',
-    'status',
-    'first_seen_head_sha',
-    'last_seen_head_sha',
-  ]
-  const openIds = new Set()
-  for (const issue of output.state.open_issues) {
-    requireExactObjectKeys(issue, issueFields, 'open issue')
-    requireStringFields(issue, issueFields, 'open issue')
-    if (!issue.id.trim()) throw new Error('finding ID must be non-empty')
-    if (openIds.has(issue.id)) throw new Error(`duplicate finding ID: ${issue.id}`)
-    openIds.add(issue.id)
-    if (!['P0', 'P1', 'P2'].includes(issue.severity)) throw new Error(`invalid issue severity: ${issue.severity}`)
-    if (issue.status !== 'open') throw new Error(`invalid issue status for ${issue.id}`)
-  }
-
-  const resolvedFields = ['id', 'resolved_in_head_sha', 'resolution']
-  const resolvedIds = new Set()
-  for (const issue of output.state.recently_resolved_issues) {
-    requireExactObjectKeys(issue, resolvedFields, 'resolved issue')
-    requireStringFields(issue, resolvedFields, 'resolved issue')
-    if (!issue.id.trim()) throw new Error('finding ID must be non-empty')
-    if (openIds.has(issue.id)) throw new Error(`finding ID appears as both open and resolved: ${issue.id}`)
-    if (resolvedIds.has(issue.id)) throw new Error(`duplicate finding ID: ${issue.id}`)
-    resolvedIds.add(issue.id)
-  }
+  validateIssueCollections(output.state)
 }
 
 function requirePriorIssuesAccountedFor(outputState, previousState, dispositions) {
@@ -1278,6 +1344,7 @@ function main() {
   if (scope.kind !== 'uncommitted') requireCleanWorktreeForCommittedScope(repoRoot, scope.kind)
   const currentScopeKey = scopeKey(repoRoot, scope)
   const ledgerDir = resolveLedgerDir(repoRoot, opts.ledgerDir)
+  requireLedgerInsideGitMetadata(repoRoot, ledgerDir)
   const statePath = path.join(ledgerDir, 'state.json')
   const reviewPath = path.join(ledgerDir, 'review.md')
   const outputPath = path.join(ledgerDir, 'reviewer-output.json')
@@ -1291,8 +1358,13 @@ function main() {
   const displayLogs = [stdoutPath, stderrPath].map((file) => path.relative(repoRoot, file) || file).join(', ')
 
   const previousState = opts.reset ? null : loadJsonIfExists(statePath)
+  requireValidCanonicalState(previousState, statePath)
   const previousReview = opts.reset ? '' : readFileIfExists(reviewPath)
   requireHealthyContinuity(ledgerDir, previousState, opts.reset)
+  const previousCanonicalArtifacts = [statePath, reviewPath, outputPath].map((artifactPath) => ({
+    artifactPath,
+    content: fs.existsSync(artifactPath) ? fs.readFileSync(artifactPath) : null,
+  }))
   // A reset pass previews the new chain (no old dispositions in prompt or filtering), but the
   // file itself is rotated only after the pass succeeds.
   const dispositions = opts.reset ? [] : loadDispositions(ledgerDir)
@@ -1458,14 +1530,45 @@ function main() {
     dispositions,
     currentContextKey,
   )
-  const finalReviewMarkdown = reconcileVerdictWithDispositions(reviewMarkdown, state.open_issues, dispositions)
-  // Keep the same promotion order as the existing local-code-review runner.
-  writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`)
-  writeFile(reviewPath, `${finalReviewMarkdown}\n`)
-  fs.copyFileSync(outputRunPath, outputPath)
-  if (opts.reset) rotateDispositionsForNewChain(ledgerDir, runId)
+  const finalReviewMarkdown = reconcileReviewVerdict(reviewMarkdown, state.open_issues, dispositions)
+  const stateText = `${JSON.stringify(state, null, 2)}\n`
+  let rotation = null
+  try {
+    // Prepare the successful-run snapshot before changing canonical artifacts.
+    writeFile(path.join(runDir, 'state.json'), stateText)
+    writeFile(path.join(runDir, 'review.md'), `${finalReviewMarkdown}\n`)
+    if (!opts.reset && fs.existsSync(path.join(ledgerDir, 'dispositions.json'))) {
+      fs.copyFileSync(path.join(ledgerDir, 'dispositions.json'), path.join(runDir, 'dispositions.json'))
+    }
 
-  copyLedgerSnapshot(ledgerDir, runDir)
+    writeFile(reviewPath, `${finalReviewMarkdown}\n`)
+    fs.copyFileSync(outputRunPath, outputPath)
+    if (opts.reset) rotation = rotateDispositionsForNewChain(ledgerDir, runId)
+    // Canonical state is the final success marker. No later file operation may fail the run.
+    writeFile(statePath, stateText)
+  } catch (error) {
+    if (rotation && fs.existsSync(rotation.rotatedPath) && !fs.existsSync(rotation.dispositionsPath)) {
+      try { fs.renameSync(rotation.rotatedPath, rotation.dispositionsPath) } catch {}
+    }
+    for (const previous of previousCanonicalArtifacts) {
+      try {
+        fs.rmSync(previous.artifactPath, { recursive: true, force: true })
+        if (previous.content !== null) writeFile(previous.artifactPath, previous.content)
+      } catch {}
+    }
+    for (const snapshotPath of [path.join(runDir, 'state.json'), path.join(runDir, 'review.md')]) {
+      try { fs.rmSync(snapshotPath, { force: true }) } catch {}
+    }
+    const rejectedPath = quarantineFailedRunOutput(runDir, outputRunPath)
+    const quarantineNote = rejectedPath ? ` Quarantined as ${rejectedPath}.` : ''
+    fail(`could not promote successful review artifacts: ${error.message}.${quarantineNote} Do not use this run.`)
+  }
+  if (rotation) {
+    console.error(
+      `[coding-review-local] --reset rotated recorded dispositions to ${path.basename(rotation.rotatedPath)}; ` +
+        'the new review chain starts without them.',
+    )
+  }
 
   console.error(`[coding-review-local] Review completed in ${durationSeconds}s`)
   console.error(`[coding-review-local] Review: ${reviewPath}`)

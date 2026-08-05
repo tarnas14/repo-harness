@@ -18,10 +18,10 @@ This skill does not install workflows, set GitHub secrets, or post GitHub commen
 - Node.js 18+
 - An authenticated CLI for the selected provider: `codex`, `claude`, or `copilot`
 
-The runner stores continuity under Git's private `coding-review-local` path. Codex keeps the existing
-`local-code-review` invocation and sandbox defaults. Claude and Copilot inspect private scope
-artifacts through read/search tools only. A mutation guard rejects any run that changes the target
-worktree.
+The runner stores continuity under Git's private `coding-review-local` path. Codex runs in a fixed
+read-only sandbox while keeping the user's Codex config and rules. Claude and Copilot inspect private
+scope artifacts through read/search tools only. A mutation guard rejects any run that changes the
+target worktree.
 
 ## Choose the reviewer explicitly
 
@@ -157,8 +157,10 @@ The built-in timeout is 20 minutes by default. Do not add an external watchdog.
 
 A failed run provides no usable findings. On nonzero exit, timeout, mutation, malformed JSON, or
 schema failure, the runner quarantines structured output as `reviewer-output.rejected.json` and does
-not update the ledger. Report the error, fix its cause, and rerun. Never mine a failed run for
-findings.
+not update continuity. The quarantined file remains audit evidence but does not block a fresh retry.
+A caught promotion failure removes its run state/review snapshot and restores the prior canonical
+artifacts, or removes partial canonical artifacts when no prior pass exists. Report the error, fix
+its cause, and rerun. Never mine a failed run for findings.
 
 ## Keep verbose output out of the driver context
 
@@ -210,9 +212,14 @@ unless the user chooses another model.
 
 - The runner snapshots scope with ordinary Git commands before invoking the reviewer. Claude and
   Copilot inspect those private artifacts plus repository files through read-only tools.
-- The default ledger is `$(git rev-parse --git-path coding-review-local)/`.
+- The ledger must stay inside the checkout's Git metadata. The default is
+  `$(git rev-parse --git-path coding-review-local)/`; custom paths outside `.git` are rejected.
+- Canonical state and its issue records are validated before they can seed or suppress a pass.
+  `state.json` is written last as the success marker after the review and structured output are ready.
 - Switching provider, model, or effort reruns the same scope and carries previous findings forward.
   Every prior open finding must remain open, be explicitly resolved, or have an owner disposition.
+- Structured issue state determines the effective verdict. The runner corrects contradictory
+  reviewer Markdown before saving or printing it.
 - Finding IDs must be non-empty and unique, and an ID cannot be both open and resolved in one pass.
 - An identical scope, contract, provider, model, effort, and disposition set skips the model call.
 - `--force` reruns identical inputs. `--reset` starts a new continuity chain and rotates dispositions

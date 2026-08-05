@@ -67,16 +67,20 @@ node scripts/run-local-review.cjs --repo-dir ../my-repo --uncommitted \
 ## Safety and continuity
 
 - The runner collects the exact Git scope into private artifacts before starting the reviewer.
-- Codex keeps the existing `local-code-review` invocation and sandbox defaults.
+- Codex runs in a fixed read-only sandbox while keeping the user's Codex config and rules.
 - Claude and Copilot receive only file read, search, and listing tools.
 - Reviewer skills, custom instructions, hooks, and MCP servers are disabled where the CLI supports it.
 - The mutation guard rejects a pass if the target worktree, refs, or private scope artifacts change while it runs.
-- Verbose CLI output and continuity state stay under
+- Verbose CLI output and continuity state must stay inside Git metadata; the default is
   `$(git rev-parse --git-path coding-review-local)/`.
+- Canonical state and its issue records are validated before use; `state.json` is written last as
+  the success marker.
 - Switching provider, model, or effort triggers a new pass and carries prior
   findings forward; an unexplained missing finding fails the pass.
-- Finding IDs must be non-empty and unique.
-- Failed runs quarantine any structured output so their findings cannot enter continuity state.
+- Structured issue state determines the saved and printed verdict; finding IDs must be non-empty
+  and unique.
+- Failed runs quarantine structured output and remove success-looking snapshots; caught promotion
+  failures restore prior canonical artifacts or clean them when no prior pass exists.
 
 See [`SKILL.md`](SKILL.md) for review-and-report mode, autonomous remediation, dispositions, and
 convergence rules.
