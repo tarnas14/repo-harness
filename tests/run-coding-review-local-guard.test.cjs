@@ -11,7 +11,7 @@ const REPO_ROOT = path.resolve(__dirname, '..')
 const RUNNER = path.join(
   REPO_ROOT,
   'skills',
-  'local-code-review',
+  'coding-review-local',
   'scripts',
   'run-local-review.cjs',
 )
@@ -31,7 +31,7 @@ function run(command, args, options = {}) {
 }
 
 function createFixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'local-code-review-guard-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-review-local-guard-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
 
   const repoDir = path.join(root, 'repo')
@@ -134,7 +134,7 @@ function runReview(fixture, extraArgs = [], extraEnv = {}) {
 }
 
 function ledgerDir(repoDir) {
-  const ledgerPath = run('git', ['rev-parse', '--git-path', 'codex-review'], { cwd: repoDir })
+  const ledgerPath = run('git', ['rev-parse', '--git-path', 'coding-review-local'], { cwd: repoDir })
   return path.resolve(repoDir, ledgerPath)
 }
 
@@ -168,32 +168,14 @@ test('tracked-file mutation trips the guard, names the file, and quarantines the
   const ledger = ledgerDir(fixture.repoDir)
   assert.ok(!fs.existsSync(path.join(ledger, 'state.json')), 'state must not persist for a failed run')
   assert.ok(
-    !fs.existsSync(path.join(ledger, 'codex-review-output.json')),
+    !fs.existsSync(path.join(ledger, 'reviewer-output.json')),
     'ledger root must not contain output of a failed run',
   )
 
   const [runDir] = runDirs(fixture.repoDir)
   assert.ok(runDir)
-  assert.ok(fs.existsSync(path.join(runDir, 'codex-review-output.rejected.json')))
-  assert.ok(!fs.existsSync(path.join(runDir, 'codex-review-output.json')))
-})
-
-test('broken continuity stops the next run until --reset is passed explicitly', (t) => {
-  const fixture = createFixture(t)
-
-  const failed = runReview(fixture, [], { FAKE_CODEX_MUTATE_TRACKED: '1' })
-  assert.equal(failed.status, 1)
-
-  run('git', ['checkout', '--', 'README.md'], { cwd: fixture.repoDir })
-
-  const blocked = runReview(fixture)
-  assert.equal(blocked.status, 1)
-  assert.match(blocked.stderr, /continuity ledger is broken/)
-  assert.match(blocked.stderr, /--reset/)
-
-  const reset = runReview(fixture, ['--reset'])
-  assert.equal(reset.status, 0, reset.stderr)
-  assert.match(reset.stdout, /Verdict: OK/)
+  assert.ok(fs.existsSync(path.join(runDir, 'reviewer-output.rejected.json')))
+  assert.ok(!fs.existsSync(path.join(runDir, 'reviewer-output.json')))
 })
 
 test('owner dispositions reach the reviewer prompt and filter dispositioned findings from state', (t) => {

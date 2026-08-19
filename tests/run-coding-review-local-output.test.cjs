@@ -11,7 +11,7 @@ const REPO_ROOT = path.resolve(__dirname, '..')
 const RUNNER = path.join(
   REPO_ROOT,
   'skills',
-  'local-code-review',
+  'coding-review-local',
   'scripts',
   'run-local-review.cjs',
 )
@@ -33,7 +33,7 @@ function run(command, args, options = {}) {
 }
 
 function createFixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'local-code-review-output-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-review-local-output-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
 
   const repoDir = path.join(root, 'repo')
@@ -103,13 +103,17 @@ function runReview(fixture, extraEnv = {}) {
   )
 }
 
-function findCodexLog(repoDir) {
-  const ledgerPath = run('git', ['rev-parse', '--git-path', 'codex-review'], { cwd: repoDir })
+function findReviewerLogs(repoDir) {
+  const ledgerPath = run('git', ['rev-parse', '--git-path', 'coding-review-local'], { cwd: repoDir })
   const ledgerDir = path.resolve(repoDir, ledgerPath)
   const runsDir = path.join(ledgerDir, 'runs')
   const runDirs = fs.readdirSync(runsDir)
   assert.equal(runDirs.length, 1)
-  return path.join(runsDir, runDirs[0], 'codex-exec.log')
+  const runDir = path.join(runsDir, runDirs[0])
+  return {
+    stdoutPath: path.join(runDir, 'reviewer.stdout.log'),
+    stderrPath: path.join(runDir, 'reviewer.stderr.log'),
+  }
 }
 
 test('prints only the final review while saving verbose reviewer output', (t) => {
@@ -121,9 +125,9 @@ test('prints only the final review while saving verbose reviewer output', (t) =>
   assert.doesNotMatch(result.stdout, new RegExp(STDOUT_MARKER))
   assert.doesNotMatch(result.stderr, new RegExp(STDERR_MARKER))
 
-  const log = fs.readFileSync(findCodexLog(fixture.repoDir), 'utf8')
-  assert.match(log, new RegExp(STDOUT_MARKER))
-  assert.match(log, new RegExp(STDERR_MARKER))
+  const logs = findReviewerLogs(fixture.repoDir)
+  assert.match(fs.readFileSync(logs.stdoutPath, 'utf8'), new RegExp(STDOUT_MARKER))
+  assert.match(fs.readFileSync(logs.stderrPath, 'utf8'), new RegExp(STDERR_MARKER))
 })
 
 test('keeps verbose reviewer output out of a failed run response', (t) => {
@@ -131,12 +135,13 @@ test('keeps verbose reviewer output out of a failed run response', (t) => {
   const result = runReview(fixture, { FAKE_CODEX_FAIL: '1' })
 
   assert.equal(result.status, 1)
-  assert.match(result.stderr, /codex exec failed with exit 7/)
-  assert.match(result.stderr, /codex-exec\.log/)
+  assert.match(result.stderr, /codex failed with exit 7/)
+  assert.match(result.stderr, /reviewer\.stdout\.log/)
+  assert.match(result.stderr, /reviewer\.stderr\.log/)
   assert.doesNotMatch(result.stdout, new RegExp(STDOUT_MARKER))
   assert.doesNotMatch(result.stderr, new RegExp(STDERR_MARKER))
 
-  const log = fs.readFileSync(findCodexLog(fixture.repoDir), 'utf8')
-  assert.match(log, new RegExp(STDOUT_MARKER))
-  assert.match(log, new RegExp(STDERR_MARKER))
+  const logs = findReviewerLogs(fixture.repoDir)
+  assert.match(fs.readFileSync(logs.stdoutPath, 'utf8'), new RegExp(STDOUT_MARKER))
+  assert.match(fs.readFileSync(logs.stderrPath, 'utf8'), new RegExp(STDERR_MARKER))
 })
