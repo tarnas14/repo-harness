@@ -8,17 +8,24 @@ const { spawnSync } = require('child_process')
 const SCRIPT_DIR = __dirname
 const EVAL_ROOT = path.resolve(SCRIPT_DIR, '..')
 const REPO_ROOT = path.resolve(EVAL_ROOT, '..', '..')
-const SKILL_ROOT = path.join(REPO_ROOT, 'skills', 'local-code-review')
+const LOCAL_SKILL_ROOT = path.join(REPO_ROOT, 'skills', 'coding-review-local')
+const CI_LOCAL_RUNNER = path.join(
+  REPO_ROOT,
+  'skills',
+  'install-code-review-bot',
+  'scripts',
+  'run-review-locally.cjs',
+)
 const WORKSPACE_ROOT = path.join(EVAL_ROOT, 'workspaces')
 const EVALS_JSON = path.join(EVAL_ROOT, 'evals.json')
 
 function usage() {
   return `Usage: run-eval.cjs [options]
 
-Run local-code-review eval fixtures against the legacy bot-parity runner and/or local runner.
+Run review eval fixtures against the local CI-bot path and/or coding-review-local.
 
 Options:
-  --runner NAME      Runner to evaluate: legacy, local, all (default: all)
+  --runner NAME      Runner to evaluate: ci-local, coding-review-local, all (default: all)
   --model MODEL      Codex review model (default: CODEX_MODEL or gpt-5.6-sol)
   --reasoning LEVEL  Reasoning effort config (default: CODEX_REASONING or high)
   --run-id ID        Workspace run id safe slug (default: timestamp)
@@ -27,14 +34,14 @@ Options:
   -h, --help         Show this help
 
 Examples:
-  node evals/local-code-review/scripts/run-eval.cjs --runner all
-  node evals/local-code-review/scripts/run-eval.cjs --runner local --model gpt-5.6-sol
-  node evals/local-code-review/scripts/run-eval.cjs --runner all --no-codex
+  node evals/coding-review-local/scripts/run-eval.cjs --runner all
+  node evals/coding-review-local/scripts/run-eval.cjs --runner coding-review-local --model gpt-5.6-sol
+  node evals/coding-review-local/scripts/run-eval.cjs --runner all --no-codex
 `
 }
 
 function fail(message, code = 1) {
-  console.error(`[local-code-review-eval] ${message}`)
+  console.error(`[coding-review-local-eval] ${message}`)
   process.exit(code)
 }
 
@@ -80,8 +87,9 @@ function parseArgs(argv) {
     }
   }
 
-  if (opts.runner === 'native') opts.runner = 'local'
-  if (!['legacy', 'local', 'all'].includes(opts.runner)) fail('--runner must be legacy, local, or all')
+  if (!['ci-local', 'coding-review-local', 'all'].includes(opts.runner)) {
+    fail('--runner must be ci-local, coding-review-local, or all')
+  }
   return opts
 }
 
@@ -167,7 +175,7 @@ function writeBaseFixture(repoDir) {
   writeFile(
     path.join(repoDir, 'package.json'),
     `{
-  "name": "local-code-review-eval-fixture",
+  "name": "coding-review-local-eval-fixture",
   "version": "0.0.0",
   "private": true,
   "type": "module"
@@ -312,7 +320,7 @@ function createFixture(repoDir) {
   fs.mkdirSync(repoDir, { recursive: true })
   git(repoDir, ['init', '-b', 'main'])
   git(repoDir, ['config', 'user.name', 'Code Review Eval'])
-  git(repoDir, ['config', 'user.email', 'local-code-review-eval@example.invalid'])
+  git(repoDir, ['config', 'user.email', 'coding-review-local-eval@example.invalid'])
   writeBaseFixture(repoDir)
   const baseSha = commitAll(repoDir, 'Initial tenant store')
   git(repoDir, ['switch', '-c', 'review-target'])
@@ -330,31 +338,31 @@ function runnerCommand(runner, repoDir, opts, title) {
   const common = ['--repo-dir', repoDir, '--base', 'main', '--title', title, '--model', opts.model, '--reasoning', opts.reasoning]
   if (opts.noCodex) common.push('--no-codex')
 
-  if (runner === 'legacy') {
+  if (runner === 'ci-local') {
     return {
       command: 'node',
-      args: [path.join(SKILL_ROOT, 'scripts', 'run-code-review.cjs'), ...common],
+      args: [CI_LOCAL_RUNNER, ...common],
     }
   }
 
   return {
     command: 'node',
-    args: [path.join(SKILL_ROOT, 'scripts', 'run-local-review.cjs'), ...common],
+    args: [path.join(LOCAL_SKILL_ROOT, 'scripts', 'run-local-review.cjs'), ...common],
   }
 }
 
 function collectOutputs(runner, repoDir, outputDir) {
   fs.mkdirSync(outputDir, { recursive: true })
 
-  if (runner === 'legacy') {
+  if (runner === 'ci-local') {
     copyIfExists(path.join(repoDir, '.codex-ci', 'review.md'), path.join(outputDir, 'review.md'))
-    copyIfExists(path.join(repoDir, '.codex-ci', 'codex-review-output.json'), path.join(outputDir, 'codex-review-output.json'))
+    copyIfExists(path.join(repoDir, '.codex-ci', 'codex-review-output.json'), path.join(outputDir, 'reviewer-output.json'))
     copyIfExists(path.join(repoDir, '.codex-ci', 'state-current.json'), path.join(outputDir, 'state.json'))
     copyIfExists(path.join(repoDir, '.codex-ci', 'review-prompt.md'), path.join(outputDir, 'prompt.md'))
   } else {
-    const ledgerDir = path.join(repoDir, '.git', 'codex-review')
+    const ledgerDir = path.join(repoDir, '.git', 'coding-review-local')
     copyIfExists(path.join(ledgerDir, 'review.md'), path.join(outputDir, 'review.md'))
-    copyIfExists(path.join(ledgerDir, 'codex-review-output.json'), path.join(outputDir, 'codex-review-output.json'))
+    copyIfExists(path.join(ledgerDir, 'reviewer-output.json'), path.join(outputDir, 'reviewer-output.json'))
     copyIfExists(path.join(ledgerDir, 'state.json'), path.join(outputDir, 'state.json'))
     copyIfExists(path.join(ledgerDir, 'prompt.md'), path.join(outputDir, 'prompt.md'))
   }
@@ -427,7 +435,7 @@ function runOneRunner(runner, runDir, opts) {
   const fixture = createFixture(repoDir)
   writeFile(path.join(runnerDir, 'fixture.json'), `${JSON.stringify(fixture, null, 2)}\n`)
 
-  console.error(`[local-code-review-eval] ${runner}: pass 1 on bug commit ${fixture.bugSha.slice(0, 8)}`)
+  console.error(`[coding-review-local-eval] ${runner}: pass 1 on bug commit ${fixture.bugSha.slice(0, 8)}`)
   let command = runnerCommand(runner, repoDir, opts, 'Eval: tenant billing credits reset omission')
   run(command.command, command.args, { cwd: REPO_ROOT, inherit: true })
   collectOutputs(runner, repoDir, path.join(runnerDir, 'pass-1'))
@@ -435,7 +443,7 @@ function runOneRunner(runner, runDir, opts) {
   const fixSha = applyFixCommit(repoDir)
   writeFile(path.join(runnerDir, 'fix-sha.txt'), `${fixSha}\n`)
 
-  console.error(`[local-code-review-eval] ${runner}: pass 2 on fix commit ${fixSha.slice(0, 8)}`)
+  console.error(`[coding-review-local-eval] ${runner}: pass 2 on fix commit ${fixSha.slice(0, 8)}`)
   command = runnerCommand(runner, repoDir, opts, 'Eval: tenant billing credits reset omission')
   run(command.command, command.args, { cwd: REPO_ROOT, inherit: true })
   collectOutputs(runner, repoDir, path.join(runnerDir, 'pass-2'))
@@ -456,7 +464,7 @@ function main() {
   fs.mkdirSync(runDir, { recursive: true })
   writeFile(path.join(runDir, 'evals.json'), `${JSON.stringify(evalSpec, null, 2)}\n`)
 
-  const runners = opts.runner === 'all' ? ['legacy', 'local'] : [opts.runner]
+  const runners = opts.runner === 'all' ? ['ci-local', 'coding-review-local'] : [opts.runner]
   const grades = {}
   for (const runner of runners) {
     grades[runner] = runOneRunner(runner, runDir, opts)
@@ -473,7 +481,7 @@ function main() {
   writeFile(path.join(runDir, 'benchmark.json'), `${JSON.stringify(benchmark, null, 2)}\n`)
 
   console.log(JSON.stringify(benchmark, null, 2))
-  console.error(`[local-code-review-eval] Workspace: ${runDir}`)
+  console.error(`[coding-review-local-eval] Workspace: ${runDir}`)
 }
 
 main()

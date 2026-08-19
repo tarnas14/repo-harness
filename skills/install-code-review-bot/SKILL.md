@@ -1,19 +1,20 @@
 ---
 name: install-code-review-bot
-description: Install, authenticate, and maintain the Codex PR-review GitHub Action bot on a repository. Copies the bundled review workflow into a target repo's .github/, then authenticates Codex for CI by provisioning a dedicated, isolated login (its own CODEX_HOME and auth.json, separate from ~/.codex) and storing it as the CODEX_AUTH_JSON_B64 repository secret. Use when setting up the GitHub code-review bot on a repo, wiring up its auth, or rotating/reauthenticating the credential it runs with.
+description: Install, authenticate, maintain, and test the Codex PR-review GitHub Action bot. Copies the bundled workflow into a target repo, provisions its isolated Codex credential, and can run the review path locally without GitHub. Use when setting up the bot, wiring or rotating its auth, or checking its review behavior before pushing to GitHub.
 license: MIT
 compatibility: Requires the gh GitHub CLI (authenticated, repo scope), the codex CLI, jq, and bash. The dedicated login uses macOS-style paths by default; the GitHub Action itself runs on Linux runners. Run the auth/secret steps with access to the target GitHub repository.
 ---
 
 # Install Code Review Bot
 
-Set up and maintain the **Codex PR-review GitHub Action** on a repository. This skill bundles the
-review workflow and its scripts (`assets/bundle/.github/`) and drives three jobs:
+Set up, maintain, and test the **Codex PR-review GitHub Action** on a repository. This skill bundles
+the review workflow and its scripts (`assets/bundle/.github/`) and drives four jobs:
 
 - **Install** - copy the bundle into a target repo's `.github/`.
 - **Authenticate** - provision a dedicated, isolated Codex login and store it as the
   `CODEX_AUTH_JSON_B64` secret the workflow consumes.
 - **Reauthenticate** - rotate that credential.
+- **Test locally** - run the bot's review path against a checked-out repository without GitHub.
 
 The auth is deliberately a *separate* Codex login in its own `CODEX_HOME`
 (`~/.codex-review-auth/home`), not your everyday `~/.codex` - so the CI credential can be rotated or
@@ -37,6 +38,7 @@ See `references/setup.md` before installing this bot in a sensitive repository.
 - "install codex-review on this repo" → **Install**, then **Authenticate**.
 - "authenticate / wire up the secret" → **Authenticate**.
 - "rotate / reauthenticate / the token is stale" → **Reauthenticate**.
+- "test the bot locally / check review without pushing" → **Test locally**.
 
 Resolve and pin the target repo first:
 
@@ -52,6 +54,20 @@ gh repo view --json nameWithOwner -q .nameWithOwner
   `--status`). Never prints token contents.
 - **`scripts/set-review-secret.sh`** - base64 the dedicated `auth.json` into the
   `CODEX_AUTH_JSON_B64` secret (`--repo`, `--dry-run`; defaults to the dedicated home).
+- **`scripts/run-review-locally.cjs`** - run the bot's scope, prompt, Codex output, and continuity
+  path against a local checkout (`--repo-dir`, `--base`, `--no-codex`). It writes private
+  `.codex-ci/` artifacts inside the target checkout.
+
+## Test locally
+
+Run from this skill directory:
+
+```bash
+node scripts/run-review-locally.cjs --repo-dir <target> --base origin/main
+```
+
+Use `--no-codex` to build the prompt and artifacts without a model call. This local path does not
+test GitHub Actions triggers, permissions, secrets, check runs, comments, or other GitHub API calls.
 
 ## Install
 

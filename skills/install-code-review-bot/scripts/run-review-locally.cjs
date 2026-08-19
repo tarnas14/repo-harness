@@ -7,14 +7,22 @@ const { spawnSync } = require('child_process')
 
 const SCRIPT_DIR = __dirname
 const SKILL_ROOT = path.resolve(SCRIPT_DIR, '..')
-const PROMPT_TEMPLATE = path.join(SKILL_ROOT, 'assets', 'prompt.md')
-const OUTPUT_SCHEMA = path.join(SKILL_ROOT, 'assets', 'output-schema.json')
+const BOT_SCRIPT_ROOT = path.join(
+  SKILL_ROOT,
+  'assets',
+  'bundle',
+  '.github',
+  'scripts',
+  'codex-review',
+)
+const PROMPT_TEMPLATE = path.join(BOT_SCRIPT_ROOT, 'prompt.md')
+const OUTPUT_SCHEMA = path.join(BOT_SCRIPT_ROOT, 'output-schema.json')
 const ARTIFACT_DIR = '.codex-ci'
 
 function usage() {
-  return `Usage: run-code-review.cjs [options]
+  return `Usage: run-review-locally.cjs [options]
 
-Run the Codex PR review workflow locally from a checked-out git repository.
+Run the Codex PR review bot workflow locally from a checked-out git repository.
 
 Options:
   --repo-dir DIR        Repository to review (default: current working directory)
@@ -34,14 +42,14 @@ Options:
   -h, --help            Show this help
 
 Examples:
-  node scripts/run-code-review.cjs --repo-dir ../my-repo --base origin/main
-  node scripts/run-code-review.cjs --repo-dir ../my-repo --base origin/main --no-codex
-  node scripts/run-code-review.cjs --repo-dir ../my-repo --base origin/main --since abc1234
+  node scripts/run-review-locally.cjs --repo-dir ../my-repo --base origin/main
+  node scripts/run-review-locally.cjs --repo-dir ../my-repo --base origin/main --no-codex
+  node scripts/run-review-locally.cjs --repo-dir ../my-repo --base origin/main --since abc1234
 `
 }
 
 function fail(message, code = 1) {
-  console.error(`[code-review] ${message}`)
+  console.error(`[ci-local-review] ${message}`)
   process.exit(code)
 }
 
@@ -323,7 +331,7 @@ function main() {
     try {
       previousState = JSON.parse(fs.readFileSync(statePath, 'utf8'))
     } catch (error) {
-      console.error(`[code-review] ignoring invalid previous state: ${error.message}`)
+      console.error(`[ci-local-review] ignoring invalid previous state: ${error.message}`)
     }
   }
 
@@ -346,7 +354,7 @@ function main() {
 
   if (scope.mode === 'skip') {
     console.log(
-      `[code-review] No new commits to review. Last reviewed head: ${shortRev(repoRoot, headSha)}`,
+      `[ci-local-review] No new commits to review. Last reviewed head: ${shortRev(repoRoot, headSha)}`,
     )
     process.exit(0)
   }
@@ -406,12 +414,12 @@ function main() {
   fs.copyFileSync(OUTPUT_SCHEMA, path.join(artifactPath, 'output-schema.json'))
 
   console.error(
-    `[code-review] Scope: mode=${scope.mode} reason=${scope.reason} commits=${scope.commitCount} range=${scope.commitRange}`,
+    `[ci-local-review] Scope: mode=${scope.mode} reason=${scope.reason} commits=${scope.commitCount} range=${scope.commitRange}`,
   )
-  console.error(`[code-review] Artifacts: ${path.relative(process.cwd(), artifactPath) || ARTIFACT_DIR}`)
+  console.error(`[ci-local-review] Artifacts: ${path.relative(process.cwd(), artifactPath) || ARTIFACT_DIR}`)
 
   if (opts.noCodex) {
-    console.log(`[code-review] Prompt built: ${path.join(ARTIFACT_DIR, 'review-prompt.md')}`)
+    console.log(`[ci-local-review] Prompt built: ${path.join(ARTIFACT_DIR, 'review-prompt.md')}`)
     process.exit(0)
   }
 
@@ -485,8 +493,8 @@ function main() {
   fs.mkdirSync(stateDir, { recursive: true })
   writeFile(previousReviewPath, `${reviewMarkdown}\n`)
 
-  console.error(`[code-review] Review completed in ${durationSeconds}s`)
-  console.error(`[code-review] Review: ${path.join(ARTIFACT_DIR, 'review.md')}`)
+  console.error(`[ci-local-review] Review completed in ${durationSeconds}s`)
+  console.error(`[ci-local-review] Review: ${path.join(ARTIFACT_DIR, 'review.md')}`)
   console.log(reviewMarkdown)
 }
 

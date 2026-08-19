@@ -1,11 +1,30 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
+const { spawnSync } = require('node:child_process')
 const test = require('node:test')
 
-const { findingAssessment, grade } = require('../evals/local-code-review-driver/scripts/run-driver-eval.cjs')
+const DRIVER_EVAL = path.join(
+  __dirname,
+  '..',
+  'evals',
+  'coding-review-local-driver',
+  'scripts',
+  'run-driver-eval.cjs',
+)
+const { findingAssessment, grade } = require(DRIVER_EVAL)
 
 const ALL_IDS = ['RRD-001', 'RRD-002', 'RRD-003']
+
+test('builds the driver prompt from the current skill contract', () => {
+  const result = spawnSync(process.execPath, [DRIVER_EVAL, '--print-prompt'], { encoding: 'utf8' })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /### Autonomous remediation/)
+  assert.match(result.stdout, /## Record dispositions/)
+  assert.match(result.stdout, /## Review rules/)
+})
 
 test('reads each disposition from its own finding block', () => {
   const output = [
