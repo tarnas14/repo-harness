@@ -46,13 +46,9 @@ The ExecPlan template in [`skills/repo-harness/assets/exec-plans/create-plan-fil
   skill for Codex, Claude Code, and GitHub Copilot. Codex remains the default; Claude defaults to
   Fable/high and Copilot to GPT-5.6 Sol/high. Install:
   `npx skills add github.com/kjendrzyca/repo-harness --skill coding-review-local`.
-- [`local-code-review`](skills/local-code-review/SKILL.md) - local Codex review skill. It runs the repo-harness
-  review prompt from a checked-out repository, stores a Git-private continuity ledger, marks fixed
-  prior findings as resolved, and prints the Markdown verdict. Install:
-  `npx skills add github.com/kjendrzyca/repo-harness --skill local-code-review`.
 - [`install-code-review-bot`](skills/install-code-review-bot/SKILL.md) - private-repository-only
-  skill that installs, authenticates, and rotates the Codex CLI PR review bot on a repo. Do not
-  install it in public repositories. Install:
+  skill that installs, authenticates, rotates, and locally tests the Codex CLI PR review bot on a
+  repo. Do not install it in public repositories. Install:
   `npx skills add github.com/kjendrzyca/repo-harness --skill install-code-review-bot`.
 
 ## Contributing

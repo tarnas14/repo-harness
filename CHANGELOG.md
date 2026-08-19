@@ -8,6 +8,15 @@ Within each date, every change should get its own `### <Change title>` section. 
 
 ## 2026-08-05
 
+### Remove the Superseded Codex-Only Local Review Skill
+
+- Remove `local-code-review` now that `coding-review-local` is the canonical local review skill.
+- Move the local CI-bot review runner to `install-code-review-bot` and make it use the bot bundle's
+  canonical prompt and output schema.
+- Keep that bot workflow authoritative when Agent Skills are visible, both in CI and local tests.
+- Retarget the review evals and retained local-runner tests to their current owners while preserving
+  the side-by-side `ci-local` and `coding-review-local` comparison.
+
 ### Harden Provider-Selectable Local Review State
 
 - Keep every ledger inside Git metadata and force Codex into a read-only sandbox without disabling
