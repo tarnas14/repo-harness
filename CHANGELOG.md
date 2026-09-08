@@ -8,6 +8,11 @@ Within each date, every change should get its own `### <Change title>` section. 
 
 ## 2026-09-08
 
+### Clarify the Autonomous Review Guiding Principle
+
+- State the driver's responsibility to assess every finding and watch for scope creep at the start
+  of `coding-review-local` autonomous remediation.
+
 ### Add a Diagnose Mode to the Repo Harness Skill
 
 - Add the `diagnose` operating mode for tracing one concrete agent mistake, such as a broken or

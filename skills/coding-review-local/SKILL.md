@@ -76,7 +76,10 @@ Use this by default when the user asks for findings or an assessment without ask
 ### Autonomous remediation
 
 Use this only when the user explicitly asks the driver to fix findings, iterate, or continue until the
-work is complete. Reviewer output is evidence, not a work order.
+work is complete.
+
+**Guiding principle:** Watch out for scope creep, and assess every finding yourself. Remember you
+are the decision-maker.
 
 Before the first pass:
 
