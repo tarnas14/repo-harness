@@ -6,6 +6,18 @@ Entries are grouped by ISO 8601 dates (`YYYY-MM-DD`). This repository does not m
 
 Within each date, every change should get its own `### <Change title>` section. Add new sections above older sections for the same day. This keeps diffs clean and avoids growing one large mixed list.
 
+## 2026-09-08
+
+### Add a Diagnose Mode to the Repo Harness Skill
+
+- Add the `diagnose` operating mode for tracing one concrete agent mistake, such as a broken or
+  missed documented rule, to its root cause and applying the smallest fix that would have
+  prevented it, without migrating the target repo toward the harness model.
+- Classify the root cause into four cases (rule missing, rule unreachable from the reading path,
+  rule ambiguous or contradicted, rule ignored despite being clear) and follow the judgment ladder
+  for the cheapest sufficient fix.
+- Bound the mode with hard scope limits and a replay-style verification of the discovery path.
+
 ## 2026-08-05
 
 ### Remove the Superseded Codex-Only Local Review Skill

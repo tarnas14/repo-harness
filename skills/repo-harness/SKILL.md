@@ -1,6 +1,6 @@
 ---
 name: repo-harness
-description: Initialize, audit, update, maintain, and continuously check repositories against a lightweight agent-first harness approach. Use when a repo needs better local docs, core beliefs, execution plans, or cleanup of harness drift.
+description: Initialize, audit, update, maintain, and continuously check repositories against a lightweight agent-first harness approach. Use when a repo needs better local docs, core beliefs, execution plans, or cleanup of harness drift. Also use when an agent broke or missed a documented repo rule and you want to trace why and apply the smallest fix.
 license: MIT
 ---
 
@@ -17,6 +17,7 @@ Use it whenever a repository needs to:
 - clean up drift and restore alignment,
 - derive project-specific core beliefs,
 - install or refresh repository-local execution plans,
+- trace why an agent missed an existing repo rule and close that one gap,
 - run continuous conformance checks over time.
 
 ## Bundled resources
@@ -50,6 +51,7 @@ Supported operating modes:
 - `decide` - answer whether the repo should add, remove, or evolve a harness element.
 - `exec-plans` - install or refresh repo-local execution-plan support.
 - `check` - run a continuous conformance review and fix or suggest the smallest useful cleanup.
+- `diagnose` - trace one concrete agent mistake to its root cause and apply the smallest fix that would prevent it, without migrating the repo toward the harness model.
 
 Inference rules:
 - If the user asks to set things up from scratch, use `init`.
@@ -59,6 +61,7 @@ Inference rules:
 - If the user asks whether a repo should evolve further, use `decide`.
 - If the user asks for planning support or multi-step planning infrastructure, use `exec-plans`.
 - If the user wants a periodic or continuous alignment review, use `check`.
+- If the user reports a specific agent mistake, such as a broken rule or violated convention, and asks why it happened or how to prevent it, use `diagnose`.
 - If the request is ambiguous, default to `audit`.
 
 ## Operating model
@@ -206,6 +209,33 @@ Your job is to answer:
 
 If the fixes are small and obvious, apply them.
 If they are bigger, suggest a single next cleanup step.
+
+### Diagnose
+
+Trace one concrete agent mistake to its root cause and apply the smallest fix that would have prevented it.
+
+Use the harness principles as a diagnostic lens only. The target repo keeps its own structure; do not migrate it toward the harness model.
+
+Workflow:
+1. Reconstruct the miss: which rule was broken, where that rule lives (or should live), and which reading path the agent plausibly took for the task.
+2. Classify the root cause:
+   - rule missing anywhere - write it into the repo's existing docs and conventions,
+   - rule exists but is not reachable from the entry point or the task's reading path - improve placement or linking,
+   - rule reachable but ambiguous or contradicted by another doc - tighten the wording,
+   - rule reachable and clear, agent ignored it anyway - not a docs problem; propose a guardrail one layer down (script, test, lint) or say explicitly that nothing should change.
+3. Apply the cheapest fix that closes this specific gap, following the judgment ladder in `references/principles.md`.
+4. Verify by replaying the discovery path: would a fresh agent given the original task now find the rule?
+
+Hard scope limits:
+- Fix only the gap that caused this miss. Report adjacent issues as observations, do not fix them.
+- Do not add harness structure the repo does not have (`docs/` trees, core beliefs, execution plans) unless the root cause is exactly "the rule was never written down" - and even then, write it into the repo's existing docs and conventions, not into harness templates.
+- If the same miss returns after a discoverability fix, treat that as the signal to escalate one rung on the judgment ladder (script, test, lint), not to write more prose.
+
+Report:
+- the root cause classification,
+- the fix applied and where,
+- the replay verification result,
+- what you deliberately did not change.
 
 ## Core beliefs workflow
 
