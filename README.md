@@ -42,6 +42,10 @@ The ExecPlan template in [`skills/repo-harness/assets/exec-plans/create-plan-fil
 
 ## Extras
 
+- [`harness-explain-diff`](skills/harness-explain-diff/SKILL.md) - explains a GitHub PR from its
+  URL as a grouped Markdown report with architecture diagrams, focused sketches, code snippets,
+  and PR diff links. Runs only when explicitly invoked and uses an isolated checkout when needed. Install:
+  `npx skills add github.com/kjendrzyca/repo-harness --skill harness-explain-diff`.
 - [`coding-review-local`](skills/coding-review-local/SKILL.md) - provider-selectable local review
   skill for Codex, Claude Code, and GitHub Copilot. Codex remains the default; Claude defaults to
   Fable/high and Copilot to GPT-5.6 Sol/high. Install:

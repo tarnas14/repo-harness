@@ -8,6 +8,12 @@ Within each date, every change should get its own `### <Change title>` section. 
 
 ## 2026-09-08
 
+### Add the harness-explain-diff Skill
+
+- Add `harness-explain-diff` for explaining GitHub pull requests from a PR URL as grouped Markdown reports with architecture diagrams, focused sketches, code snippets, and PR diff links.
+- The skill runs only when explicitly invoked and uses an isolated checkout when needed.
+- Install it with `npx skills add github.com/kjendrzyca/repo-harness --skill harness-explain-diff`.
+
 ### Clarify the Autonomous Review Guiding Principle
 
 - State the driver's responsibility to assess every finding and watch for scope creep at the start
