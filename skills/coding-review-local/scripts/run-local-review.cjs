@@ -41,7 +41,7 @@ Options:
   --commit SHA          Review a single checked-out commit instead of a branch diff; SHA must match HEAD
   --uncommitted         Review staged, unstaged, and untracked changes
   --provider NAME       Reviewer CLI: codex, claude, or copilot (default: codex)
-  --model MODEL         Reviewer model (defaults: Codex gpt-5.6-sol, Claude fable, Copilot gpt-5.6-sol)
+  --model MODEL         Reviewer model (defaults: Codex gpt-6-astra, Claude fable, Copilot gpt-5.6-sol)
   --effort LEVEL        Reviewer reasoning effort (default: high; --reasoning is an alias)
   --reset               Ignore previous local review state
   --force               Review even if the same scope and reviewer settings were already reviewed
@@ -79,7 +79,7 @@ function providerDefaults(provider) {
     }
   }
   return {
-    model: process.env.CODEX_MODEL || 'gpt-5.6-sol',
+    model: process.env.CODEX_MODEL || 'gpt-6-astra',
     effort: process.env.CODEX_REASONING || 'high',
   }
 }

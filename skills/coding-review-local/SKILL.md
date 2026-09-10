@@ -29,7 +29,7 @@ Codex remains the default when `--provider` is omitted.
 
 | Provider | Flag | Default model | Default effort |
 | --- | --- | --- | --- |
-| Codex | `--provider codex` | `gpt-5.6-sol` | `high` |
+| Codex | `--provider codex` | `gpt-6-astra` | `high` |
 | Claude Code | `--provider claude` | `fable` | `high` |
 | GitHub Copilot | `--provider copilot` | `gpt-5.6-sol` | `high` |
 

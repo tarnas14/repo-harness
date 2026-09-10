@@ -6,6 +6,13 @@ Entries are grouped by ISO 8601 dates (`YYYY-MM-DD`). This repository does not m
 
 Within each date, every change should get its own `### <Change title>` section. Add new sections above older sections for the same day. This keeps diffs clean and avoids growing one large mixed list.
 
+## 2026-09-10
+
+### Use Astra for Local Codex Reviews
+
+- Change the `coding-review-local` Codex default to `gpt-6-astra` with `high` reasoning.
+- Keep Claude and GitHub Copilot defaults unchanged.
+
 ## 2026-09-08
 
 ### Add the harness-explain-diff Skill

@@ -183,18 +183,18 @@ function valueAfter(args, flag) {
   return args[index + 1]
 }
 
-test('Codex remains the default provider with the existing production defaults', (t) => {
+test('Codex remains the default provider with gpt-6-astra/high', (t) => {
   const fixture = createFixture(t)
   const result = runReview(fixture)
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /Codex Review Pass 1 - Verdict: OK/)
   assert.doesNotMatch(result.stdout, /verbose codex output/)
-  assert.match(result.stderr, /Reviewer: Codex \(gpt-5\.6-sol, effort high\)/)
+  assert.match(result.stderr, /Reviewer: Codex \(gpt-6-astra, effort high\)/)
 
   const args = reviewerArgs(fixture)
   assert.equal(args[0], 'exec')
-  assert.equal(valueAfter(args, '--model'), 'gpt-5.6-sol')
+  assert.equal(valueAfter(args, '--model'), 'gpt-6-astra')
   assert.equal(valueAfter(args, '--sandbox'), 'read-only')
   assert.ok(args.includes('model_reasoning_effort="high"'))
   assert.ok(args.includes('sandbox_workspace_write.network_access=false'))

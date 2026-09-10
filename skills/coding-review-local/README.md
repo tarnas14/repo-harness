@@ -2,7 +2,7 @@
 
 Run the same local code-review workflow with one of three reviewer CLIs:
 
-- Codex, the default: `gpt-5.6-sol` with high reasoning
+- Codex, the default: `gpt-6-astra` with high reasoning
 - Claude Code: `fable` with high effort
 - GitHub Copilot: `gpt-5.6-sol` with high effort
 
