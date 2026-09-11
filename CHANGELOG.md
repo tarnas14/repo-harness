@@ -6,6 +6,16 @@ Entries are grouped by ISO 8601 dates (`YYYY-MM-DD`). This repository does not m
 
 Within each date, every change should get its own `### <Change title>` section. Add new sections above older sections for the same day. This keeps diffs clean and avoids growing one large mixed list.
 
+## 2026-09-11
+
+### Rename the Local Review Skill to harness-review-local
+
+- Rename `coding-review-local` to `harness-review-local`, including install commands, runner
+  messages, evals, and test paths.
+- Remove the old skill installation and install `harness-review-local` when upgrading.
+- Keep the Git-private `coding-review-local` storage path unchanged so existing review history
+  and owner dispositions remain available without migration.
+
 ## 2026-09-10
 
 ### Use Astra for Local Codex Reviews

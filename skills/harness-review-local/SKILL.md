@@ -1,10 +1,10 @@
 ---
-name: coding-review-local
+name: harness-review-local
 description: Run a high-signal local code review from a checked-out repository with Codex, Claude Code, or GitHub Copilot CLI, plus a Git-private continuity ledger. Use when reviewing a local branch, commit, uncommitted changes, or PR without a CI bot, including explicit autonomous remediation loops. Codex is the default reviewer; Claude and Copilot are selectable providers.
 license: MIT
 ---
 
-# Coding Review Local
+# Harness Review Local
 
 Run a bundled staff-level review prompt through one of three reviewer CLIs. The reviewer is told not
 to modify the checkout. The invoking agent remains the driver: it assesses findings, decides what
@@ -18,7 +18,8 @@ This skill does not install workflows, set GitHub secrets, or post GitHub commen
 - Node.js 18+
 - An authenticated CLI for the selected provider: `codex`, `claude`, or `copilot`
 
-The runner stores continuity under Git's private `coding-review-local` path. Codex runs in a fixed
+The runner keeps the Git-private `coding-review-local` storage path unchanged after the skill rename,
+so existing findings and dispositions remain available without migration. Codex runs in a fixed
 read-only sandbox while keeping the user's Codex config and rules. Claude and Copilot inspect private
 scope artifacts through read/search tools only. A mutation guard rejects any run that changes the
 target worktree.

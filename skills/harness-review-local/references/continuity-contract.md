@@ -1,6 +1,8 @@
 # Local Review Continuity Contract
 
-The `coding-review-local` runner stores continuity under Git private metadata by default:
+The `harness-review-local` runner stores continuity under Git private metadata by default.
+The storage path retains its original `coding-review-local` name so the skill rename does not
+reset existing findings, dispositions, or run history:
 
 ```text
 $(git rev-parse --git-path coding-review-local)/

@@ -9,7 +9,7 @@ const DRIVER_EVAL = path.join(
   __dirname,
   '..',
   'evals',
-  'coding-review-local-driver',
+  'harness-review-local-driver',
   'scripts',
   'run-driver-eval.cjs',
 )

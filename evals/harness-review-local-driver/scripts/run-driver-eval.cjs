@@ -8,7 +8,7 @@ const { spawnSync } = require('child_process')
 const SCRIPT_DIR = __dirname
 const EVAL_ROOT = path.resolve(SCRIPT_DIR, '..')
 const REPO_ROOT = path.resolve(EVAL_ROOT, '..', '..')
-const SKILL_MD = path.join(REPO_ROOT, 'skills', 'coding-review-local', 'SKILL.md')
+const SKILL_MD = path.join(REPO_ROOT, 'skills', 'harness-review-local', 'SKILL.md')
 const EVALS_JSON = path.join(EVAL_ROOT, 'evals.json')
 const WORKSPACE_ROOT = path.join(EVAL_ROOT, 'workspaces')
 
@@ -18,7 +18,7 @@ const NEARBY_CHARS = 240
 function usage() {
   return `Usage: run-driver-eval.cjs --driver-cmd CMD [options]
 
-Evaluate whether a DRIVER model following the coding-review-local skill produces a visible
+Evaluate whether a DRIVER model following the harness-review-local skill produces a visible
 disposition for every review finding and refuses to treat scope-expanding findings as
 actionable. This evaluates the main agent, not the reviewer.
 
@@ -32,9 +32,9 @@ Options:
   -h, --help         Show this help
 
 Examples:
-  node evals/coding-review-local-driver/scripts/run-driver-eval.cjs \\
+  node evals/harness-review-local-driver/scripts/run-driver-eval.cjs \\
     --driver-cmd 'codex exec --ephemeral --skip-git-repo-check -'
-  node evals/coding-review-local-driver/scripts/run-driver-eval.cjs \\
+  node evals/harness-review-local-driver/scripts/run-driver-eval.cjs \\
     --driver-cmd 'claude -p'
 `
 }
@@ -101,7 +101,7 @@ function buildPrompt(evalCase) {
 
   return [
     'You are the main agent (the decision maker) in an autonomous code-review remediation loop.',
-    'You follow the coding-review-local skill. The relevant skill rules are:',
+    'You follow the harness-review-local skill. The relevant skill rules are:',
     '',
     '---',
     skill,

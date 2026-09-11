@@ -10,6 +10,7 @@ const SCRIPT_DIR = __dirname
 const SKILL_ROOT = path.resolve(SCRIPT_DIR, '..')
 const PROMPT_TEMPLATE = path.join(SKILL_ROOT, 'references', 'review-prompt.md')
 const OUTPUT_SCHEMA = path.join(SKILL_ROOT, 'assets', 'local-output-schema.json')
+// Keep the pre-rename storage path so existing review chains need no migration.
 const LEDGER_NAME = 'coding-review-local'
 const SUPPORTED_PROVIDERS = new Set(['codex', 'claude', 'copilot'])
 const MAX_GIT_OUTPUT_BUFFER_BYTES = envPositiveInteger(
@@ -85,7 +86,7 @@ function providerDefaults(provider) {
 }
 
 function fail(message, code = 1) {
-  console.error(`[coding-review-local] ${message}`)
+  console.error(`[harness-review-local] ${message}`)
   process.exit(code)
 }
 
@@ -626,7 +627,7 @@ function requireDispositionsBoundToChain(dispositions, previousState, ledgerDir)
   const known = knownIssueIds(previousState)
   if (previousState && !Array.isArray(previousState.known_issue_ids)) {
     console.error(
-      '[coding-review-local] previous state predates known_issue_ids; validating dispositions against the latest successful run snapshot.',
+      '[harness-review-local] previous state predates known_issue_ids; validating dispositions against the latest successful run snapshot.',
     )
     for (const id of latestSuccessfulRunDispositionIds(ledgerDir)) known.add(id)
   }
@@ -750,7 +751,7 @@ function reconcileReviewVerdict(reviewMarkdown, openIssues, dispositions) {
     : `Effective verdict: ${effective}.`
   return (
     `${reconciled}\n\n---\n\n` +
-    `[coding-review-local] ${label} ${notes.join('; ')}. ` +
+    `[harness-review-local] ${label} ${notes.join('; ')}. ` +
     'Continuity state and this effective verdict are authoritative for the review loop.'
   )
 }
@@ -767,7 +768,7 @@ function warnAboutUndispositionedFindings(previousState, dispositions, scopeUnch
   const undispositioned = openIssues.filter((issue) => issue.id && !dispositioned.has(issue.id))
   if (!undispositioned.length) return
   console.error(
-    `[coding-review-local] Nothing changed since the previous pass, but ${undispositioned.length} open finding(s) ` +
+    `[harness-review-local] Nothing changed since the previous pass, but ${undispositioned.length} open finding(s) ` +
       `have no recorded disposition: ${undispositioned.map((issue) => issue.id).join(', ')}. ` +
       'Fix them or record rejected/deferred entries in dispositions.json so later passes stop re-raising them.',
   )
@@ -1400,7 +1401,7 @@ function main() {
 
   if (alreadyReviewed) {
     console.log(
-      `[coding-review-local] No new scope to review. Last reviewed head: ${scope.headSha.slice(0, 8)}. Use --force to re-review.`,
+      `[harness-review-local] No new scope to review. Last reviewed head: ${scope.headSha.slice(0, 8)}. Use --force to re-review.`,
     )
     process.exit(0)
   }
@@ -1450,12 +1451,12 @@ function main() {
   artifacts.promptPath = runPromptPath
   artifacts.schemaPath = schemaPath
 
-  console.error(`[coding-review-local] Scope: ${scope.label}`)
-  console.error(`[coding-review-local] Reviewer: ${reviewerLabel(opts.provider)} (${opts.model}, effort ${opts.reasoning})`)
-  console.error(`[coding-review-local] Ledger: ${path.relative(repoRoot, ledgerDir) || ledgerDir}`)
+  console.error(`[harness-review-local] Scope: ${scope.label}`)
+  console.error(`[harness-review-local] Reviewer: ${reviewerLabel(opts.provider)} (${opts.model}, effort ${opts.reasoning})`)
+  console.error(`[harness-review-local] Ledger: ${path.relative(repoRoot, ledgerDir) || ledgerDir}`)
 
   if (opts.noReviewer) {
-    console.log(`[coding-review-local] Prompt built: ${promptPath}`)
+    console.log(`[harness-review-local] Prompt built: ${promptPath}`)
     process.exit(0)
   }
 
@@ -1463,8 +1464,8 @@ function main() {
   const beforeSignature = worktreeMutationSignatureObject(repoRoot)
   const beforeArtifactSignature = scopeArtifactSignature(artifacts)
   const started = Date.now()
-  console.error('[coding-review-local] Review in progress - do not modify the repository until this process exits')
-  console.error(`[coding-review-local] Reviewer logs: ${displayLogs}`)
+  console.error('[harness-review-local] Review in progress - do not modify the repository until this process exits')
+  console.error(`[harness-review-local] Reviewer logs: ${displayLogs}`)
   const reviewerResult = run(invocation.command, invocation.args, {
     cwd: repoRoot,
     input: invocation.input,
@@ -1565,13 +1566,13 @@ function main() {
   }
   if (rotation) {
     console.error(
-      `[coding-review-local] --reset rotated recorded dispositions to ${path.basename(rotation.rotatedPath)}; ` +
+      `[harness-review-local] --reset rotated recorded dispositions to ${path.basename(rotation.rotatedPath)}; ` +
         'the new review chain starts without them.',
     )
   }
 
-  console.error(`[coding-review-local] Review completed in ${durationSeconds}s`)
-  console.error(`[coding-review-local] Review: ${reviewPath}`)
+  console.error(`[harness-review-local] Review completed in ${durationSeconds}s`)
+  console.error(`[harness-review-local] Review: ${reviewPath}`)
   console.log(finalReviewMarkdown)
 }
 

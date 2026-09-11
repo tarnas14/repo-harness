@@ -1,4 +1,4 @@
-# Coding Review Local
+# Harness Review Local
 
 Run the same local code-review workflow with one of three reviewer CLIs:
 
@@ -16,7 +16,7 @@ For Claude Code and GitHub Copilot:
 
 ```bash
 npx skills add github.com/kjendrzyca/repo-harness \
-  --skill coding-review-local \
+  --skill harness-review-local \
   --agent claude-code github-copilot \
   --global \
   --yes
@@ -26,7 +26,7 @@ For all detected agents:
 
 ```bash
 npx skills add github.com/kjendrzyca/repo-harness \
-  --skill coding-review-local \
+  --skill harness-review-local \
   --agent '*' \
   --global \
   --yes
@@ -34,14 +34,18 @@ npx skills add github.com/kjendrzyca/repo-harness \
 
 Requirements: Git, Node.js 18+, and an authenticated CLI for the selected reviewer.
 
+Previously installed as `coding-review-local`? Remove that skill installation and install
+`harness-review-local` instead. The Git-private `coding-review-local` storage path stays unchanged,
+so existing review history and dispositions need no migration.
+
 ## Run
 
 Ask your agent to use the skill and name the reviewer:
 
 ```text
-Use coding-review-local to review my uncommitted changes with Claude.
-Use coding-review-local to review this branch against origin/main with GitHub Copilot.
-Use coding-review-local to review HEAD with the default Codex provider.
+Use harness-review-local to review my uncommitted changes with Claude.
+Use harness-review-local to review this branch against origin/main with GitHub Copilot.
+Use harness-review-local to review HEAD with the default Codex provider.
 ```
 
 Direct runner examples:

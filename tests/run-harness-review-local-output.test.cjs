@@ -11,7 +11,7 @@ const REPO_ROOT = path.resolve(__dirname, '..')
 const RUNNER = path.join(
   REPO_ROOT,
   'skills',
-  'coding-review-local',
+  'harness-review-local',
   'scripts',
   'run-local-review.cjs',
 )
@@ -33,7 +33,7 @@ function run(command, args, options = {}) {
 }
 
 function createFixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-review-local-output-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-review-local-output-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
 
   const repoDir = path.join(root, 'repo')

@@ -11,7 +11,7 @@ const REPO_ROOT = path.resolve(__dirname, '..')
 const RUNNER = path.join(
   REPO_ROOT,
   'skills',
-  'coding-review-local',
+  'harness-review-local',
   'scripts',
   'run-local-review.cjs',
 )
@@ -126,7 +126,7 @@ process.stderr.write('verbose ${provider} diagnostics\\n')
 }
 
 function createFixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-review-local-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-review-local-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
 
   const repoDir = path.join(root, 'repo')
@@ -190,7 +190,9 @@ test('Codex remains the default provider with gpt-6-astra/high', (t) => {
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /Codex Review Pass 1 - Verdict: OK/)
   assert.doesNotMatch(result.stdout, /verbose codex output/)
-  assert.match(result.stderr, /Reviewer: Codex \(gpt-6-astra, effort high\)/)
+  assert.match(result.stderr, /\[harness-review-local\] Reviewer: Codex \(gpt-6-astra, effort high\)/)
+  // The skill rename must not start a separate continuity ledger.
+  assert.ok(!fs.existsSync(path.join(fixture.repoDir, '.git', 'harness-review-local')))
 
   const args = reviewerArgs(fixture)
   assert.equal(args[0], 'exec')
