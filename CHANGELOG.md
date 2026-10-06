@@ -6,6 +6,14 @@ Entries are grouped by ISO 8601 dates (`YYYY-MM-DD`). This repository does not m
 
 Within each date, every change should get its own `### <Change title>` section. Add new sections above older sections for the same day. This keeps diffs clean and avoids growing one large mixed list.
 
+## 2026-10-06
+
+### Keep Project Constraints in the Relevant Docs
+
+- Stop creating `core-beliefs.md` as a separate harness element; remove its workflow and template.
+- Keep constraints and their reasons in the relevant product, architecture, and workflow docs.
+- Retain focused questions for unclear tradeoffs, and require evidence of intent before turning code patterns into rules.
+
 ## 2026-09-11
 
 ### Rename the Local Review Skill to harness-review-local

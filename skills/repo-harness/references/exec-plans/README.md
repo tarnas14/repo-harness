@@ -15,8 +15,7 @@ Do not install execution plans first.
 Execution plans should be added only after the repository already has a usable base harness:
 - a readable `README.md`,
 - a local `AGENTS.md` that acts as a map,
-- any necessary orientation and architecture docs,
-- local core beliefs if the project truly has them.
+- any necessary orientation and architecture docs, including the constraints relevant to the work.
 
 Only then should execution-plan support be added.
 

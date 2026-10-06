@@ -1,6 +1,6 @@
 ---
 name: repo-harness
-description: Initialize, audit, update, maintain, and continuously check repositories against a lightweight agent-first harness approach. Use when a repo needs better local docs, core beliefs, execution plans, or cleanup of harness drift. Also use when an agent broke or missed a documented repo rule and you want to trace why and apply the smallest fix.
+description: Set up, audit, and maintain repository documentation and instructions for AI agents. Use for repository harness structure, execution-plan support, or diagnosing why an agent missed a repo rule.
 license: MIT
 ---
 
@@ -15,7 +15,7 @@ Use it whenever a repository needs to:
 - assess whether its current harness is too thin or too heavy,
 - add one justified next-layer improvement,
 - clean up drift and restore alignment,
-- derive project-specific core beliefs,
+- document project constraints and the reasons behind them,
 - install or refresh repository-local execution plans,
 - trace why an agent missed an existing repo rule and close that one gap,
 - run continuous conformance checks over time.
@@ -27,10 +27,8 @@ Use these bundled files as the canonical reference material for this skill.
 Always read:
 - [references/principles.md](references/principles.md)
 
-Read when core beliefs may matter:
-- [references/core-beliefs/README.md](references/core-beliefs/README.md)
-- [references/core-beliefs/questionnaire.md](references/core-beliefs/questionnaire.md)
-- [assets/core-beliefs/template.md](assets/core-beliefs/template.md)
+Read when project constraints or tradeoffs are unclear:
+- [references/design-questions.md](references/design-questions.md)
 
 Read when execution plans may matter:
 - [references/exec-plans/README.md](references/exec-plans/README.md)
@@ -79,7 +77,6 @@ After the first setup, the target repo's own docs, checks, and conventions shoul
 - Never make the repo less legible during a cleanup. If you shrink `AGENTS.md`, first identify any still-unique knowledge and move it into destination docs in the same change.
 - Prefer additive split-then-trim migrations over trim-then-reconstruct cleanups.
 - Do not create a large docs tree for optics.
-- Do not create repo-specific core beliefs from generic software advice.
 - Do not install execution plans too early.
 - Keep canonical docs free of references to completed execution plans. Plans may link to docs, but docs must not link to plans, so the docs stay stable as plans are created, completed, and archived.
 - Promote repeated human judgment downward over time: docs, then scripts/tests, then lints when warranted.
@@ -123,8 +120,6 @@ Typical outputs may include:
 - a shorter and better-linked `AGENTS.md`,
 - `docs/index.md`, `docs/PROJECT.md`, `docs/ARCHITECTURE.md`, or `docs/WORKFLOWS.md` if the repo is no longer obvious.
 
-Only derive `docs/core-beliefs.md` if the repo clearly has real non-obvious beliefs.
-
 Only install `docs/exec-plans/` at the end if the repo has already earned it or the user explicitly wants it.
 
 ### Audit
@@ -147,7 +142,7 @@ Examples:
 - split an oversized `AGENTS.md`,
 - add `docs/index.md`,
 - add `docs/ARCHITECTURE.md`,
-- derive `docs/core-beliefs.md`,
+- clarify a recurring design constraint in the relevant existing doc,
 - install `docs/exec-plans/`,
 - add one lightweight guardrail.
 
@@ -170,7 +165,7 @@ Fix small issues directly. For larger issues, make the smallest safe correction 
 
 Answer a narrow maturity or architecture question such as:
 - should this repo add `docs/ARCHITECTURE.md`?
-- should we introduce `docs/core-beliefs.md` yet?
+- does this constraint need documentation or an automated check?
 - should execution plans be installed now?
 - should this repo stay as-is for now?
 
@@ -228,7 +223,7 @@ Workflow:
 
 Hard scope limits:
 - Fix only the gap that caused this miss. Report adjacent issues as observations, do not fix them.
-- Do not add harness structure the repo does not have (`docs/` trees, core beliefs, execution plans) unless the root cause is exactly "the rule was never written down" - and even then, write it into the repo's existing docs and conventions, not into harness templates.
+- Do not add harness structure the repo does not have (`docs/` trees, execution plans) unless the root cause is exactly "the rule was never written down" - and even then, write it into the repo's existing docs and conventions, not into harness templates.
 - If the same miss returns after a discoverability fix, treat that as the signal to escalate one rung on the judgment ladder (script, test, lint), not to write more prose.
 
 Report:
@@ -236,15 +231,6 @@ Report:
 - the fix applied and where,
 - the replay verification result,
 - what you deliberately did not change.
-
-## Core beliefs workflow
-
-When the repo seems to have real non-negotiable beliefs:
-- infer them from code, tests, docs, scripts, and recurring patterns,
-- ask only the minimum number of targeted questions from `references/core-beliefs/questionnaire.md`,
-- write a short repo-local `docs/core-beliefs.md` only if the beliefs are real, stable, and operational.
-
-Do not create a beliefs file full of slogans.
 
 ## Continuous evolution rule
 

@@ -101,27 +101,17 @@ The highest-value documentation explains:
 
 The lowest-value documentation simply restates obvious code.
 
-### 2.6 Project-specific core beliefs are local, not global
+### 2.6 Document constraints and their intent
 
-Every serious repo eventually develops a small set of non-negotiable beliefs.
+Document project-specific constraints when they change implementation or review decisions.
+Explain what applies, why, and how it affects a concrete choice in the relevant existing
+doc. In a tiny repo, a README section may be enough. For the default layout, see
+"Role of each document" under M1.
 
-These are things like:
-- what tradeoffs the project chooses on purpose,
-- what kinds of errors are worse than slowness or inconvenience,
-- what must always stay true about architecture, data flow, local dev, or safety,
-- what kinds of fixes are unacceptable even if they "work".
-
-Those beliefs are project-specific.
-
-Do not copy them from this skill bundle.
-Do not copy them from another repo.
-
-Instead:
-- infer them from the codebase when possible,
-- ask the maintainer targeted questions when they are not explicit yet,
-- write them down in the target repo as `docs/core-beliefs.md` only when they are real and decision-shaping.
-
-See `references/core-beliefs/` and `assets/core-beliefs/` in this skill bundle for the generation workflow.
+Code, tests, and recurring patterns provide evidence to investigate. A repeated pattern
+alone does not prove intent: it may reflect an accident or a temporary workaround.
+Before presenting it as a rule, check documented decisions or confirm the intent with
+the maintainer. Keep unresolved inferences explicit as questions or assumptions.
 
 ### 2.7 Encode repeated judgment at the lowest sensible layer
 
@@ -178,7 +168,6 @@ Optional:
 Do not add yet:
 - a large `docs/` tree,
 - an execution plan system,
-- repo-specific core beliefs unless the project truly has them,
 - custom lints without a history of real failures,
 - recurring cleanup jobs.
 
@@ -211,21 +200,19 @@ Minimum useful setup:
 - `docs/PROJECT.md`,
 - `docs/ARCHITECTURE.md`,
 - `docs/WORKFLOWS.md` only if workflows are genuinely non-obvious,
-- `docs/core-beliefs.md` only if the project has clear non-negotiables,
 - a repo-local execution-plan entrypoint such as `docs/exec-plans/create-plan-file.md` only for larger multi-step changes.
 
 Role of each document:
+- `AGENTS.md` - reading paths, concise agent permissions and work rules, links to verification commands.
 - `docs/index.md` - entry point into repo knowledge.
-- `docs/PROJECT.md` - scope, goals, terminology, key use cases.
-- `docs/ARCHITECTURE.md` - major parts of the system, boundaries, dependencies, extension points.
-- `docs/WORKFLOWS.md` - release, migration, local debugging, data seeding, or similar operational flows.
-- `docs/core-beliefs.md` - a short set of project-specific, non-negotiable design constraints.
+- `docs/PROJECT.md` - scope, goals, terminology, key use cases, product priorities and tradeoffs.
+- `docs/ARCHITECTURE.md` - major parts of the system, boundaries, dependencies, extension points, technical constraints.
+- `docs/WORKFLOWS.md` - procedures and verification details for release, migration, local debugging, data seeding, or similar operational flows.
 - `docs/exec-plans/active/*.md` or the repo's equivalent - active plans for work that does not fit into one clean hop.
 
 Important rule:
 - do not create empty categories for future optics,
-- do not create `docs/decisions/` unless there are recurring non-obvious decisions worth revisiting,
-- do not create `docs/core-beliefs.md` full of generic slogans.
+- do not create `docs/decisions/` unless there are recurring non-obvious decisions worth revisiting.
 
 Signals to move to M2:
 - architectural drift starts showing up,
@@ -244,7 +231,6 @@ docs/
   PROJECT.md
   ARCHITECTURE.md
   WORKFLOWS.md
-  core-beliefs.md
 docs/
   exec-plans/
     create-plan-file.md
@@ -292,7 +278,6 @@ docs/
   PROJECT.md
   ARCHITECTURE.md
   WORKFLOWS.md
-  core-beliefs.md
   QUALITY.md
   references/
   generated/
@@ -338,7 +323,6 @@ They also make it easy for an agent to answer:
 That means a mature `AGENTS.md` often includes:
 - reading paths for common task types,
 - links to architecture docs,
-- links to local core beliefs,
 - links to execution plans when relevant.
 
 Do not jump there too early, but recognize that principles alone are not enough once a repo grows.
@@ -366,8 +350,6 @@ Minimal loop:
 
 - One giant `AGENTS.md` full of everything.
 - Empty `docs/` folders created for future optics.
-- Copying another project's core beliefs into your repo.
-- Turning a beliefs document into vague slogans.
 - Creating execution plan infrastructure before work is complex enough to need it.
 - Adding browser automation before basic scripts and tests are useful.
 - Letting prompts become the hidden source of truth instead of moving durable knowledge into the repo.
@@ -380,7 +362,6 @@ If you want one cross-repo default, use this:
 - Every repo has `README.md` and a short `AGENTS.md`.
 - `AGENTS.md` points to local source-of-truth docs and verification commands.
 - Add `docs/` only when the repo stops being obvious.
-- Generate project-specific `docs/core-beliefs.md` only when there are real non-negotiables worth preserving.
 - Add `docs/exec-plans/` only when work stops fitting in one clean prompt.
 - Promote repeated human judgment into automation over time.
 
